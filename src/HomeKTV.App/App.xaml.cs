@@ -28,10 +28,15 @@ public partial class App : System.Windows.Application
             var settingsStore=new JsonSettingsStore(paths);var loaded=await settingsStore.LoadAsync();if(loaded.RecoveryMessage is not null)_logger.Warning("{Recovery}",loaded.RecoveryMessage);
             _database=new HomeKtvDatabase(paths);await _database.InitializeAsync();
             if(!await _database.QuickCheckAsync())throw new InvalidDataException("数据库完整性检查失败。请从 Data/Backups 恢复备份。\n");
-            if(e.Args.Contains("--health-check",StringComparer.OrdinalIgnoreCase)){_logger.Information("Portable health check completed successfully");Shutdown(0);return;}
-
             var songs=new SqliteSongRepository(_database);var queue=new SqliteQueueRepository(_database);var backups=new DatabaseBackupService(_database,paths);
             var inspector=new FfprobeMediaInspector(Path.Combine(paths.Ffmpeg,"ffprobe.exe"));var importer=new LocalMediaImporter(paths,_database,songs,inspector);
+            if(e.Args.Contains("--import-demo",StringComparer.OrdinalIgnoreCase))
+            {
+                var demo=Path.Combine(paths.ImportBox,"HomeKTV - 测试歌曲.mp4");var lyric=Path.Combine(paths.ImportBox,"HomeKTV - 测试歌曲.lrc");
+                if(!File.Exists(demo))throw new FileNotFoundException("ImportBox 中缺少演示测试视频。",demo);
+                var imported=await importer.ImportAsync(new LocalImportRequest(demo,"测试歌曲","HomeKTV","其他",LyricPath:File.Exists(lyric)?lyric:null));_logger.Information("Demo import: {Message}",imported.Message);
+            }
+            if(e.Args.Contains("--health-check",StringComparer.OrdinalIgnoreCase)){_logger.Information("Portable health check completed successfully");Shutdown(0);return;}
             try{_player=new LibVlcPlaybackService(paths);}catch(Exception exception){_logger.Error(exception,"LibVLC initialization failed; desktop library remains available");}
             if(loaded.Settings.MobileOrderingEnabled)
             {
@@ -40,11 +45,15 @@ public partial class App : System.Windows.Application
             }
             var viewModel=new MainViewModel(paths,loaded.Settings,_database,songs,queue,importer,backups,settingsStore,_player,_server,_logger);
             var window=new MainWindow(viewModel);MainWindow=window;ShutdownMode=ShutdownMode.OnMainWindowClose;window.Show();
+            if(e.Args.Contains("--smoke-ui",StringComparer.OrdinalIgnoreCase))
+            {
+                var timer=new DispatcherTimer{Interval=TimeSpan.FromSeconds(8)};timer.Tick+=(_,_)=>{timer.Stop();window.Close();};timer.Start();
+            }
             if(loaded.RecoveryMessage is not null)MessageBox.Show(loaded.RecoveryMessage,"设置已恢复",MessageBoxButton.OK,MessageBoxImage.Information);
         }
         catch(Exception exception)
         {
-            _logger.Fatal(exception,"HomeKTV startup failed");MessageBox.Show("HomeKTV 启动失败：\n"+exception.Message+"\n\n请查看 Logs 目录中的详细日志。","启动失败",MessageBoxButton.OK,MessageBoxImage.Error);Shutdown(1);
+            _logger.Fatal(exception,"HomeKTV startup failed");if(!e.Args.Contains("--smoke-ui",StringComparer.OrdinalIgnoreCase))MessageBox.Show("HomeKTV 启动失败：\n"+exception.Message+"\n\n请查看 Logs 目录中的详细日志。","启动失败",MessageBoxButton.OK,MessageBoxImage.Error);Shutdown(1);
         }
     }
 
@@ -54,7 +63,12 @@ public partial class App : System.Windows.Application
 
     protected override void OnExit(ExitEventArgs e)
     {
-        try{_server?.DisposeAsync().AsTask().GetAwaiter().GetResult();_player?.Dispose();_database?.DisposeAsync().AsTask().GetAwaiter().GetResult();}
+        try
+        {
+            _logger?.Information("HomeKTV shutdown started");var server=_server;var database=_database;
+            Task.Run(async()=>{if(server is not null)await server.DisposeAsync();if(database is not null)await database.DisposeAsync();}).GetAwaiter().GetResult();
+            _player?.Dispose();_logger?.Information("HomeKTV shutdown completed");
+        }
         catch(Exception exception){_logger?.Error(exception,"Error while shutting down HomeKTV");}
         finally{(_logger as IDisposable)?.Dispose();Log.CloseAndFlush();}
         base.OnExit(e);

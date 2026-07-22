@@ -3,7 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Application.Resources>
         <Color x:Key="Bg">#090B16</Color><Color x:Key="Panel">#141725</Color><Color x:Key="Panel2">#1B1E30</Color>
-        <Color x:Key="Accent">#FF477E</Color><Color x:Key="Purple">#7656F6</Color><Color x:Key="Text">#F7F7FB</Color><Color x:Key="Muted">#9297AA</Color>
+        <Color x:Key="Accent">#FF477E</Color><SolidColorBrush x:Key="Purple" Color="#7656F6"/><Color x:Key="Text">#F7F7FB</Color><Color x:Key="Muted">#9297AA</Color>
         <SolidColorBrush x:Key="BgBrush" Color="{StaticResource Bg}"/><SolidColorBrush x:Key="PanelBrush" Color="{StaticResource Panel}"/>
         <SolidColorBrush x:Key="Panel2Brush" Color="{StaticResource Panel2}"/><SolidColorBrush x:Key="AccentBrush" Color="{StaticResource Accent}"/>
         <SolidColorBrush x:Key="TextBrush" Color="{StaticResource Text}"/><SolidColorBrush x:Key="MutedBrush" Color="{StaticResource Muted}"/>

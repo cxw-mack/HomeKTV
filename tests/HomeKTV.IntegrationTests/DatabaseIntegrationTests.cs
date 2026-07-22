@@ -76,6 +76,30 @@ public sealed class DatabaseIntegrationTests
         await using var connection=await fixture.Database.OpenConnectionAsync();var command=connection.CreateCommand();command.CommandText="SELECT COUNT(*) FROM DatabaseBackups;";Assert.Equal(1L,Convert.ToInt64(await command.ExecuteScalarAsync()));
     }
 
+    [Fact]
+    public async Task LocalImporterCopiesMediaAndCreatesRelativeSongRecord()
+    {
+        await using var fixture=await TestDatabase.CreateAsync();var source=Path.Combine(fixture.Root,"source.mp4");await File.WriteAllBytesAsync(source,[0,1,2,3,4]);
+        var repository=new SqliteSongRepository(fixture.Database);var importer=new LocalMediaImporter(fixture.Paths,fixture.Database,repository,new FfprobeMediaInspector(Path.Combine(fixture.Root,"missing-ffprobe.exe")));
+        var result=await importer.ImportAsync(new LocalImportRequest(source,"测试导入","歌手"));
+        Assert.NotNull(result.Song);Assert.False(Path.IsPathRooted(result.Song!.VideoRelativePath));Assert.True(File.Exists(fixture.Paths.Resolve(result.Song.VideoRelativePath)));Assert.Single(await repository.SearchAsync("测试导入"));
+    }
+
+    [Fact]
+    public async Task RestoreRollsDatabaseBackToSelectedValidBackup()
+    {
+        await using var fixture=await TestDatabase.CreateAsync();var repository=new SqliteSongRepository(fixture.Database);await repository.UpsertAsync(new Song{Title="备份前",ArtistDisplayName="歌手",VideoRelativePath="Media/MV/a.mp4",FileHash="restore-a"});
+        var service=new DatabaseBackupService(fixture.Database,fixture.Paths);var backup=await service.BackupAsync("restore-test");await repository.UpsertAsync(new Song{Title="备份后",ArtistDisplayName="歌手",VideoRelativePath="Media/MV/b.mp4",FileHash="restore-b"});
+        await service.RestoreAsync(backup);Assert.Empty(await repository.SearchAsync("备份后"));Assert.Single(await repository.SearchAsync("备份前"));
+    }
+
+    [Fact]
+    public async Task MissingMediaFileProducesFriendlyFileError()
+    {
+        var missing=Path.Combine(Path.GetTempPath(),Guid.NewGuid().ToString("N"),"missing.mp4");
+        await Assert.ThrowsAsync<FileNotFoundException>(()=>FileHashService.ComputeSha256Async(missing));
+    }
+
     private sealed class TestDatabase : IAsyncDisposable
     {
         private TestDatabase(string root, PortablePaths paths, HomeKtvDatabase database) { Root=root;Paths=paths;Database=database; }
@@ -84,4 +108,3 @@ public sealed class DatabaseIntegrationTests
         public async ValueTask DisposeAsync(){await Database.DisposeAsync();if(Directory.Exists(Root))Directory.Delete(Root,true);}
     }
 }
-

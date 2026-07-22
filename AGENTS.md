@@ -28,7 +28,7 @@ HomeKTV 是面向家庭聚会的离线 Windows 11 x64 KTV 点歌系统。主屏�
 ./scripts/verify-portable.ps1
 ```
 
-开发机未把 .NET 10 加入 PATH 时，脚本会自动发现 `C:\Users\CXW\.codex-tools\dotnet10\dotnet.exe`，也可通过 `HOMEKTV_DOTNET` 指定。
+开发机未把 .NET 10 加入 PATH 时，脚本会从当前 Windows 用户目录发现 `.codex-tools/dotnet10/dotnet.exe`，也可通过 `HOMEKTV_DOTNET` 指定。
 
 ## 便携性约束
 
@@ -50,4 +50,3 @@ HomeKTV 是面向家庭聚会的离线 Windows 11 x64 KTV 点歌系统。主屏�
 ## 完成标准
 
 `dist/HomeKTV-Portable-win-x64/HomeKTV.exe` 可在 Windows 11 x64 独立启动；能够初始化/恢复数据库、导入并搜索歌曲、排队和播放、同步 LRC、运行手机点歌页与 SignalR、在第二显示器全屏；发布目录移动或盘符变化后仍可使用，并生成 `dist/HomeKTV-Portable-win-x64.zip`。
-

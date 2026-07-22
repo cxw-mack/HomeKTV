@@ -11,4 +11,5 @@ dist/
 *.nupkg
 *.snupkg
 .bootstrap-cache/
+runtime-assets/FFmpeg/*.exe
 
