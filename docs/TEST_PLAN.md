@@ -8,11 +8,10 @@
 2. `dotnet build HomeKTV.sln -c Release`，记录警告和错误。
 3. `dotnet test`，生成 TRX 报告。
 4. 生成无版权测试视频与 LRC，验证 FFprobe 能读取 H.264/AAC、时长、分辨率和音轨。
-5. 发布并从发布目录运行 `--health-check`。
+5. 发布并从发布目录运行 `--import-demo --playback-smoke --health-check`，等待 LibVLC 真正解码到 `EndReached`。
 6. 复制发布目录到不同临时路径再次健康检查。
 7. 检查单显示器降级；具备第二显示器的机器上检查 HDMI 全屏与 Esc。
 8. 占用默认端口后检查回退；断开互联网后检查桌面搜索、SQLite、Web 静态资源和播放。
 9. 临时移除 FFmpeg、媒体文件和损坏 Settings.json，确认功能降级和恢复提示。
 
 真实电视、声卡音轨标注、硬件 H.265 解码与热拔移动硬盘仍需在目标家庭设备上做人工验收；自动化测试不会故意在写入中物理拔盘。
-

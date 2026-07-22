@@ -30,14 +30,21 @@ public partial class App : System.Windows.Application
             if(!await _database.QuickCheckAsync())throw new InvalidDataException("数据库完整性检查失败。请从 Data/Backups 恢复备份。\n");
             var songs=new SqliteSongRepository(_database);var queue=new SqliteQueueRepository(_database);var backups=new DatabaseBackupService(_database,paths);
             var inspector=new FfprobeMediaInspector(Path.Combine(paths.Ffmpeg,"ffprobe.exe"));var importer=new LocalMediaImporter(paths,_database,songs,inspector);
+            string? demoPlaybackPath=null;
             if(e.Args.Contains("--import-demo",StringComparer.OrdinalIgnoreCase))
             {
                 var demo=Path.Combine(paths.ImportBox,"HomeKTV - 测试歌曲.mp4");var lyric=Path.Combine(paths.ImportBox,"HomeKTV - 测试歌曲.lrc");
                 if(!File.Exists(demo))throw new FileNotFoundException("ImportBox 中缺少演示测试视频。",demo);
                 var imported=await importer.ImportAsync(new LocalImportRequest(demo,"测试歌曲","HomeKTV","其他",LyricPath:File.Exists(lyric)?lyric:null));_logger.Information("Demo import: {Message}",imported.Message);
+                var demoSong=imported.Song??(await songs.SearchAsync("测试歌曲",limit:10)).FirstOrDefault();if(demoSong is not null)demoPlaybackPath=paths.Resolve(demoSong.VideoRelativePath);
+            }
+            if(e.Args.Contains("--playback-smoke",StringComparer.OrdinalIgnoreCase))
+            {
+                if(demoPlaybackPath is null)throw new InvalidOperationException("播放烟测缺少已导入的演示歌曲。\n");
+                _player=new LibVlcPlaybackService(paths);var completed=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);_player.PlaybackEnded+=(_,_)=>completed.TrySetResult();_player.PlaybackFailed+=(_,message)=>completed.TrySetException(new InvalidDataException(message));await _player.PlayAsync(demoPlaybackPath);await completed.Task.WaitAsync(TimeSpan.FromSeconds(30));_logger.Information("LibVLC playback smoke completed");
             }
             if(e.Args.Contains("--health-check",StringComparer.OrdinalIgnoreCase)){_logger.Information("Portable health check completed successfully");Shutdown(0);return;}
-            try{_player=new LibVlcPlaybackService(paths);}catch(Exception exception){_logger.Error(exception,"LibVLC initialization failed; desktop library remains available");}
+            try{_player??=new LibVlcPlaybackService(paths);}catch(Exception exception){_logger.Error(exception,"LibVLC initialization failed; desktop library remains available");}
             if(loaded.Settings.MobileOrderingEnabled)
             {
                 try{_server=new HomeKtvWebServer(paths,loaded.Settings,songs,queue);await _server.StartAsync();_logger.Information("Mobile server listening at {Address}",_server.LanAddress);}
