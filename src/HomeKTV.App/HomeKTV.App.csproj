@@ -1,0 +1,31 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>HomeKTV</AssemblyName>
+    <RootNamespace>HomeKTV.App</RootNamespace>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <PublishTrimmed>false</PublishTrimmed>
+    <DebugType>embedded</DebugType>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="QRCoder" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\HomeKTV.Core\HomeKTV.Core.csproj" />
+    <ProjectReference Include="..\HomeKTV.Infrastructure\HomeKTV.Infrastructure.csproj" />
+    <ProjectReference Include="..\HomeKTV.Library\HomeKTV.Library.csproj" />
+    <ProjectReference Include="..\HomeKTV.Lyrics\HomeKTV.Lyrics.csproj" />
+    <ProjectReference Include="..\HomeKTV.Player\HomeKTV.Player.csproj" />
+    <ProjectReference Include="..\HomeKTV.Server\HomeKTV.Server.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,10 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+  <ItemGroup><FrameworkReference Include="Microsoft.AspNetCore.App" /></ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\HomeKTV.Core\HomeKTV.Core.csproj" />
+    <ProjectReference Include="..\HomeKTV.Infrastructure\HomeKTV.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

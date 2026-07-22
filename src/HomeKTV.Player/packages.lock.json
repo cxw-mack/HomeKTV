@@ -1,0 +1,30 @@
+{
+  "version": 2,
+  "dependencies": {
+    "net10.0-windows7.0": {
+      "LibVLCSharp.WPF": {
+        "type": "Direct",
+        "requested": "[3.10.0, )",
+        "resolved": "3.10.0",
+        "contentHash": "W7MFdY0QZBhATS3ZIMZSY1UYV6MqDxb+GibNzT3AzKNzDQX2Kzf27OZA5B0gA7fa2FYq79P7Jvlvdbbygis63g==",
+        "dependencies": {
+          "LibVLCSharp": "3.10.0"
+        }
+      },
+      "VideoLAN.LibVLC.Windows": {
+        "type": "Direct",
+        "requested": "[3.0.23.1, )",
+        "resolved": "3.0.23.1",
+        "contentHash": "yTGNrzj+Q/t72VNKK0d64jZ+8BGu5Vcp2nxpZ2ll350LkRWKSwqShGpZWcVxXVP8TiMbeGML09+Jzz3hNsIcqA=="
+      },
+      "LibVLCSharp": {
+        "type": "Transitive",
+        "resolved": "3.10.0",
+        "contentHash": "VHuOfq8Xtb/lNz0asvCm5qDjgTmfB3m3lC40Dz9iH9oL3DM0fSXHjZaLxdtYVr5nsldJoh5BTeG8MtODprhC9Q=="
+      },
+      "homektv.core": {
+        "type": "Project"
+      }
+    }
+  }
+}
