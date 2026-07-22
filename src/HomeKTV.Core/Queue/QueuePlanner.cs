@@ -6,7 +6,12 @@ public static class QueuePlanner
 {
     public static IReadOnlyList<QueueItem> Order(IEnumerable<QueueItem> items, QueueOrderingMode mode)
     {
-        var waiting = items.Where(x => x.State is QueueItemState.Waiting or QueueItemState.Loading)
+        var source = items.ToList();
+        var current = source.Where(x => x.State is QueueItemState.Playing or QueueItemState.Paused)
+            .OrderBy(x => x.RequestedAt)
+            .ThenBy(x => x.Id)
+            .ToList();
+        var waiting = source.Where(x => x.State is QueueItemState.Waiting or QueueItemState.Loading)
             .OrderByDescending(x => x.IsPinned)
             .ThenBy(x => x.Position)
             .ThenBy(x => x.RequestedAt)
@@ -16,7 +21,7 @@ public static class QueuePlanner
         var pinned = waiting.Where(x => x.IsPinned).ToList();
         var regular = waiting.Where(x => !x.IsPinned).ToList();
         if (mode == QueueOrderingMode.FirstComeFirstServed)
-            return pinned.Concat(regular.OrderBy(x => x.RequestedAt).ThenBy(x => x.Id)).ToList();
+            return current.Concat(pinned).Concat(regular.OrderBy(x => x.RequestedAt).ThenBy(x => x.Id)).ToList();
 
         var guestOrder = regular.GroupBy(x => x.GuestSessionId)
             .OrderBy(g => g.Min(x => x.RequestedAt))
@@ -24,7 +29,8 @@ public static class QueuePlanner
             .Select(g => new Queue<QueueItem>(g.OrderBy(x => x.RequestedAt).ThenBy(x => x.Position).ThenBy(x => x.Id)))
             .ToList();
 
-        var result = new List<QueueItem>(waiting.Count);
+        var result = new List<QueueItem>(current.Count + waiting.Count);
+        result.AddRange(current);
         result.AddRange(pinned);
         while (guestOrder.Any(q => q.Count > 0))
         {
@@ -34,4 +40,3 @@ public static class QueuePlanner
         return result;
     }
 }
-

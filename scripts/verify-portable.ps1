@@ -13,6 +13,7 @@ try{
     New-Item -ItemType Directory -Path $resolvedVerify|Out-Null
     Copy-Item -LiteralPath $portable -Destination $resolvedVerify -Recurse
     $copy=Join-Path $resolvedVerify (Split-Path $portable -Leaf);$process=Start-Process -FilePath (Join-Path $copy 'HomeKTV.exe') -ArgumentList '--health-check' -WorkingDirectory $copy -WindowStyle Hidden -PassThru;if(-not $process.WaitForExit(30000)){Stop-Process -Id $process.Id -Force;throw '复制路径健康检查超时。'};if($process.ExitCode -ne 0){throw "复制路径健康检查失败：$($process.ExitCode)"}
+    $server=Start-Process -FilePath (Join-Path $copy 'HomeKTV.exe') -ArgumentList '--server-smoke' -WorkingDirectory $copy -WindowStyle Hidden -PassThru;if(-not $server.WaitForExit(30000)){Stop-Process -Id $server.Id -Force;throw '手机服务健康检查超时。'};if($server.ExitCode -ne 0){throw "手机服务健康检查失败：$($server.ExitCode)"}
     $ui=Start-Process -FilePath (Join-Path $copy 'HomeKTV.exe') -ArgumentList '--smoke-ui' -WorkingDirectory $copy -WindowStyle Hidden -PassThru;if(-not $ui.WaitForExit(90000)){Stop-Process -Id $ui.Id -Force;throw 'WPF/LibVLC/服务器启动与安全退出烟测超时。'};if($ui.ExitCode -ne 0){throw "WPF 启动烟测失败：$($ui.ExitCode)"}
 }finally{if(Test-Path -LiteralPath $resolvedVerify){Remove-Item -LiteralPath $resolvedVerify -Recurse -Force}}
 Write-Host '[HomeKTV] PASS：目录、LibVLC、FFmpeg、Web、相对配置和复制路径健康检查全部通过。' -ForegroundColor Green

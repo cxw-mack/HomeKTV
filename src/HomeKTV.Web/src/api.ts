@@ -1,21 +1,25 @@
 export interface Song { id:number; title:string; artistDisplayName:string; language:string; durationMs:number; isFavorite:boolean; isAvailable:boolean }
 export interface QueueSong { id:number; title:string; artistDisplayName:string }
-export interface QueueItem { id:number; songId:number; requestedBy:string; guestSessionId:string; state:number; song:QueueSong }
-export interface Session { id:string; nickname:string; isAdministrator:boolean }
+export interface QueueItem { id:number; songId:number; requestedBy:string; requestedAt:string; position:number; isPinned:boolean; state:number; errorMessage:string|null; isMine:boolean; song:QueueSong }
+export interface Session { id:string; nickname:string; isAdministrator:boolean; accessToken:string }
 export interface Playback { title:string|null; artist:string|null; state:string; nextTitle:string|null }
 
-async function request<T>(url:string, init?:RequestInit):Promise<T> {
-  const response=await fetch(url,{...init,headers:{'Content-Type':'application/json',...(init?.headers??{})}})
-  if(!response.ok){let message=`请求失败 (${response.status})`;try{message=(await response.json()).error??message}catch{}throw new Error(message)}
+function sessionHeaders(session?:Session|null):Record<string,string> {
+  return session?{'X-HomeKTV-Session':session.id,'X-HomeKTV-Token':session.accessToken}:{}
+}
+
+async function request<T>(url:string, init?:RequestInit, session?:Session|null):Promise<T> {
+  const response=await fetch(url,{...init,headers:{'Content-Type':'application/json',...sessionHeaders(session),...(init?.headers??{})}})
+  if(!response.ok){let message='请求失败 ('+response.status+')';try{message=(await response.json()).error??message}catch{}throw new Error(message)}
   return response.status===204 ? undefined as T : response.json() as Promise<T>
 }
 
 export const api={
   createSession:(nickname:string)=>request<Session>('/api/session',{method:'POST',body:JSON.stringify({nickname})}),
-  search:(query:string,language='')=>request<Song[]>(`/api/songs?q=${encodeURIComponent(query)}&language=${encodeURIComponent(language)}`),
-  state:()=>request<{playback:Playback;queue:QueueItem[]}>('/api/state'),
-  enqueue:(songId:number,sessionId:string)=>request<QueueItem>('/api/queue',{method:'POST',body:JSON.stringify({songId,sessionId})}),
-  remove:(id:number,sessionId:string)=>request<void>(`/api/queue/${id}?sessionId=${encodeURIComponent(sessionId)}`,{method:'DELETE'}),
-  favorite:(id:number,isFavorite:boolean,sessionId:string)=>request<void>(`/api/songs/${id}/favorite`,{method:'POST',body:JSON.stringify({isFavorite,sessionId})})
+  search:(query:string,language='')=>request<Song[]>('/api/songs?q='+encodeURIComponent(query)+'&language='+encodeURIComponent(language)),
+  state:(session:Session)=>request<{playback:Playback;queue:QueueItem[]}>('/api/state',undefined,session),
+  enqueue:(songId:number,session:Session)=>request<QueueItem>('/api/queue',{method:'POST',body:JSON.stringify({songId})},session),
+  remove:(id:number,session:Session)=>request<void>('/api/queue/'+id,{method:'DELETE'},session),
+  move:(id:number,direction:-1|1,session:Session)=>request<void>('/api/queue/'+id+'/move',{method:'POST',body:JSON.stringify({direction})},session),
+  favorite:(id:number,isFavorite:boolean,session:Session)=>request<void>('/api/songs/'+id+'/favorite',{method:'POST',body:JSON.stringify({isFavorite})},session)
 }
-

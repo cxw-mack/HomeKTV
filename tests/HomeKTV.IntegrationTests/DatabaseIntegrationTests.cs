@@ -39,6 +39,14 @@ public sealed class DatabaseIntegrationTests
     }
 
     [Fact]
+    public async Task RepositoryRejectsMediaPathThatEscapesPortableRoot()
+    {
+        await using var fixture = await TestDatabase.CreateAsync();
+        var repository = new SqliteSongRepository(fixture.Database);
+        await Assert.ThrowsAsync<ArgumentException>(() => repository.UpsertAsync(new Song { Title="x",ArtistDisplayName="y",VideoRelativePath="../outside.mp4" }));
+    }
+
+    [Fact]
     public async Task QueueOwnerCannotRemoveAnotherGuestsSongButAdministratorCan()
     {
         await using var fixture = await TestDatabase.CreateAsync();
@@ -48,6 +56,15 @@ public sealed class DatabaseIntegrationTests
         var item = await queue.EnqueueAsync(songId, "owner", "小明");
         Assert.False(await queue.RemoveAsync(item.Id, "other", false));
         Assert.True(await queue.RemoveAsync(item.Id, null, true));
+    }
+
+    [Fact]
+    public async Task InterruptedQueueStatesRecoverToWaiting()
+    {
+        await using var fixture=await TestDatabase.CreateAsync();var songs=new SqliteSongRepository(fixture.Database);
+        var songId=await songs.UpsertAsync(new Song{Title="恢复",ArtistDisplayName="歌手",VideoRelativePath="Media/MV/recover.mp4",FileHash="recover-hash"});
+        var queue=new SqliteQueueRepository(fixture.Database);var item=await queue.EnqueueAsync(songId,"owner","小明");await queue.SetStateAsync(item.Id,QueueItemState.Playing);
+        Assert.Equal(1,await queue.RecoverInterruptedAsync());var recovered=Assert.Single(await queue.GetActiveAsync());Assert.Equal(QueueItemState.Waiting,recovered.State);
     }
 
     [Fact]

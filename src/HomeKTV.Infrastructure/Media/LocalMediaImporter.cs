@@ -49,7 +49,7 @@ public sealed class LocalMediaImporter(PortablePaths paths, HomeKtvDatabase data
 
     private async Task<bool> HashExistsAsync(string hash, CancellationToken cancellationToken)
     {
-        await using var connection=await database.OpenConnectionAsync(cancellationToken); var command=connection.CreateCommand();command.CommandText="SELECT EXISTS(SELECT 1 FROM Songs WHERE FileHash=$hash);";command.Parameters.AddWithValue("$hash",hash);return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken))==1;
+        return await database.ReadAsync(async (connection,ct)=>{var command=connection.CreateCommand();command.CommandText="SELECT EXISTS(SELECT 1 FROM Songs WHERE FileHash=$hash);";command.Parameters.AddWithValue("$hash",hash);return Convert.ToInt32(await command.ExecuteScalarAsync(ct))==1;},cancellationToken);
     }
 
     private static async Task CopyAtomicallyAsync(string source, string target, CancellationToken cancellationToken)
@@ -63,4 +63,3 @@ public sealed class LocalMediaImporter(PortablePaths paths, HomeKtvDatabase data
     private static string SafeName(string value){foreach(var c in Path.GetInvalidFileNameChars())value=value.Replace(c,'_');return value.Trim().TrimEnd('.');}
     private static void TryDelete(string path){try{if(File.Exists(path))File.Delete(path);if(File.Exists(path+".importing"))File.Delete(path+".importing");}catch(IOException){}}
 }
-

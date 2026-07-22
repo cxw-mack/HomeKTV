@@ -26,20 +26,31 @@ public sealed class ServerIntegrationTests
         await using var fixture=await ServerFixture.CreateAsync();
         using var client=new HttpClient { BaseAddress=new Uri(fixture.Server.LocalAddress) };
         var health=await client.GetAsync("health");Assert.Equal(HttpStatusCode.OK,health.StatusCode);
-        var sessionResponse=await client.PostAsJsonAsync("api/session",new { nickname="小夏" });sessionResponse.EnsureSuccessStatusCode();
-        var session=await sessionResponse.Content.ReadFromJsonAsync<GuestSessionDto>();Assert.NotNull(session);
+        var session=await CreateSession(client,"小夏");
         var search=await client.GetFromJsonAsync<Song[]>("api/songs?q=hktk");var song=Assert.Single(search!);
-        var enqueue=await client.PostAsJsonAsync("api/queue",new { songId=song.Id,sessionId=session!.Id });enqueue.EnsureSuccessStatusCode();
-        var state=await client.GetFromJsonAsync<JsonElement>("api/state");Assert.Single(state.GetProperty("queue").EnumerateArray());
+        using var enqueueRequest=Authorized(HttpMethod.Post,"api/queue",session,new { songId=song.Id });
+        var enqueue=await client.SendAsync(enqueueRequest);enqueue.EnsureSuccessStatusCode();
+        using var stateRequest=Authorized(HttpMethod.Get,"api/state",session);
+        var stateResponse=await client.SendAsync(stateRequest);stateResponse.EnsureSuccessStatusCode();
+        var state=await stateResponse.Content.ReadFromJsonAsync<JsonElement>();var item=Assert.Single(state.GetProperty("queue").EnumerateArray());
+        Assert.True(item.GetProperty("isMine").GetBoolean());Assert.False(item.TryGetProperty("guestSessionId",out _));
     }
 
     [Fact]
-    public async Task OrdinaryGuestCannotDeleteAnotherGuestsQueueItem()
+    public async Task SessionTokenCannotBeSpoofedAndQueueDoesNotLeakOwnerCredential()
     {
         await using var fixture=await ServerFixture.CreateAsync();using var client=new HttpClient { BaseAddress=new Uri(fixture.Server.LocalAddress) };
         var first=await CreateSession(client,"甲");var second=await CreateSession(client,"乙");
-        var response=await client.PostAsJsonAsync("api/queue",new { songId=fixture.SongId,sessionId=first.Id });var item=await response.Content.ReadFromJsonAsync<QueueItem>();
-        var denied=await client.DeleteAsync($"api/queue/{item!.Id}?sessionId={second.Id}");Assert.Equal(HttpStatusCode.Forbidden,denied.StatusCode);
+        using var enqueueRequest=Authorized(HttpMethod.Post,"api/queue",first,new { songId=fixture.SongId });
+        var response=await client.SendAsync(enqueueRequest);response.EnsureSuccessStatusCode();var item=await response.Content.ReadFromJsonAsync<QueueItemDto>();
+        var publicState=await client.GetStringAsync("api/state");Assert.DoesNotContain(first.Id,publicState,StringComparison.Ordinal);Assert.DoesNotContain(first.AccessToken,publicState,StringComparison.Ordinal);
+
+        using var deniedRequest=Authorized(HttpMethod.Delete,$"api/queue/{item!.Id}",second);
+        var denied=await client.SendAsync(deniedRequest);Assert.Equal(HttpStatusCode.Forbidden,denied.StatusCode);
+
+        using var spoofed=new HttpRequestMessage(HttpMethod.Delete,$"api/queue/{item.Id}");
+        spoofed.Headers.Add(HomeKtvWebServer.SessionIdHeader,first.Id);spoofed.Headers.Add(HomeKtvWebServer.SessionTokenHeader,second.AccessToken);
+        var unauthorized=await client.SendAsync(spoofed);Assert.Equal(HttpStatusCode.Unauthorized,unauthorized.StatusCode);
     }
 
     [Fact]
@@ -50,7 +61,16 @@ public sealed class ServerIntegrationTests
         using var request=new HttpRequestMessage(HttpMethod.Delete,"api/admin/queue");request.Headers.Add("X-Admin-Pin","2468");var allowed=await client.SendAsync(request);Assert.Equal(HttpStatusCode.NoContent,allowed.StatusCode);
     }
 
-    private static async Task<GuestSessionDto> CreateSession(HttpClient client,string nickname){var response=await client.PostAsJsonAsync("api/session",new{nickname});return (await response.Content.ReadFromJsonAsync<GuestSessionDto>())!;}
+    private static async Task<GuestSessionGrantDto> CreateSession(HttpClient client,string nickname)
+    {
+        var response=await client.PostAsJsonAsync("api/session",new{nickname});response.EnsureSuccessStatusCode();return (await response.Content.ReadFromJsonAsync<GuestSessionGrantDto>())!;
+    }
+
+    private static HttpRequestMessage Authorized(HttpMethod method,string url,GuestSessionGrantDto session,object? body=null)
+    {
+        var request=new HttpRequestMessage(method,url);request.Headers.Add(HomeKtvWebServer.SessionIdHeader,session.Id);request.Headers.Add(HomeKtvWebServer.SessionTokenHeader,session.AccessToken);
+        if(body is not null)request.Content=JsonContent.Create(body);return request;
+    }
 
     private sealed class ServerFixture : IAsyncDisposable
     {
@@ -66,4 +86,3 @@ public sealed class ServerIntegrationTests
         public async ValueTask DisposeAsync(){await Server.DisposeAsync();await Database.DisposeAsync();if(Directory.Exists(Root))Directory.Delete(Root,true);}
     }
 }
-

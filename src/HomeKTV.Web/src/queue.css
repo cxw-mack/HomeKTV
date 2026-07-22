@@ -1,0 +1,4 @@
+.song.queue { grid-template-columns: 31px 1fr 126px; }
+.queue-actions { display: flex; align-items: center; justify-content: flex-end; gap: 2px; }
+.queue-actions button { border: 0; background: #24283b; color: #d8d9e4; border-radius: 9px; min-width: 30px; height: 34px; }
+.queue-actions .remove { color: #ff9aaa; background: transparent; min-width: 48px; }

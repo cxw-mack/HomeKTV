@@ -9,16 +9,18 @@ const query=ref(''), language=ref(''), songs=ref<Song[]>([]), queue=ref<QueueIte
 const playback=ref<Playback>({title:null,artist:null,state:'Idle',nextTitle:null}), tab=ref<Tab>('songs')
 const busy=ref(false), message=ref(''), online=ref(navigator.onLine)
 let connection:signalR.HubConnection|null=null, searchTimer=0
-const myQueue=computed(()=>queue.value.filter(x=>x.guestSessionId===session.value?.id))
+const myQueue=computed(()=>queue.value.filter(x=>x.isMine))
 
 async function enter(){if(!nickname.value.trim())return;busy.value=true;try{session.value=await api.createSession(nickname.value.trim());localStorage.setItem('homektv-nickname',nickname.value.trim());await load();await connect()}catch(e){notice(e)}finally{busy.value=false}}
-async function load(){const state=await api.state();queue.value=state.queue;playback.value=state.playback;await search()}
+async function load(){await loadState();await search()}
+async function loadState(){if(!session.value)return;const state=await api.state(session.value);queue.value=state.queue;playback.value=state.playback}
 async function search(){busy.value=true;try{songs.value=await api.search(query.value,language.value)}catch(e){notice(e)}finally{busy.value=false}}
-async function order(song:Song){if(!session.value)return;try{await api.enqueue(song.id,session.value.id);message.value=`已点《${song.title}》`;setTimeout(()=>message.value='',1800)}catch(e){notice(e)}}
-async function remove(item:QueueItem){if(!session.value||!confirm(`删除《${item.song.title}》？`))return;try{await api.remove(item.id,session.value.id);queue.value=queue.value.filter(x=>x.id!==item.id)}catch(e){notice(e)}}
-async function favorite(song:Song){if(!session.value)return;try{song.isFavorite=!song.isFavorite;await api.favorite(song.id,song.isFavorite,session.value.id)}catch(e){song.isFavorite=!song.isFavorite;notice(e)}}
+async function order(song:Song){if(!session.value)return;try{await api.enqueue(song.id,session.value);message.value='已点《'+song.title+'》';setTimeout(()=>message.value='',1800)}catch(e){notice(e)}}
+async function remove(item:QueueItem){if(!session.value||!confirm('删除《'+item.song.title+'》？'))return;try{await api.remove(item.id,session.value);queue.value=queue.value.filter(x=>x.id!==item.id)}catch(e){notice(e)}}
+async function move(item:QueueItem,direction:-1|1){if(!session.value)return;try{await api.move(item.id,direction,session.value);await loadState()}catch(e){notice(e)}}
+async function favorite(song:Song){if(!session.value)return;try{song.isFavorite=!song.isFavorite;await api.favorite(song.id,song.isFavorite,session.value)}catch(e){song.isFavorite=!song.isFavorite;notice(e)}}
 function notice(error:unknown){message.value=error instanceof Error?error.message:'操作失败，请稍后重试';setTimeout(()=>message.value='',2800)}
-async function connect(){if(connection)return;connection=new signalR.HubConnectionBuilder().withUrl('/hub').withAutomaticReconnect([0,1000,3000,5000]).build();connection.on('queueChanged',(items:QueueItem[])=>queue.value=items);connection.on('playbackChanged',(state:Playback)=>playback.value=state);connection.onreconnecting(()=>online.value=false);connection.onreconnected(()=>{online.value=true;void load()});try{await connection.start();online.value=true}catch{online.value=false}}
+async function connect(){if(connection)return;connection=new signalR.HubConnectionBuilder().withUrl('/hub').withAutomaticReconnect([0,1000,3000,5000]).build();connection.on('queueChanged',()=>void loadState());connection.on('playbackChanged',(state:Playback)=>playback.value=state);connection.onreconnecting(()=>online.value=false);connection.onreconnected(()=>{online.value=true;void load()});try{await connection.start();online.value=true}catch{online.value=false}}
 watch([query,language],()=>{clearTimeout(searchTimer);searchTimer=window.setTimeout(()=>void search(),250)})
 onMounted(()=>{window.addEventListener('online',()=>online.value=true);window.addEventListener('offline',()=>online.value=false)})
 onBeforeUnmount(()=>{void connection?.stop()})
@@ -43,7 +45,7 @@ onBeforeUnmount(()=>{void connection?.stop()})
     </section>
     <section v-show="tab!=='songs'" class="content"><div class="section-title"><h3>{{tab==='mine'?'我的点歌':'已点队列'}}</h3><span>{{(tab==='mine'?myQueue:queue).length}} 首</span></div>
       <div v-if="(tab==='mine'?myQueue:queue).length===0" class="empty">队列还是空的<br><small>从歌库挑一首开始吧</small></div>
-      <article v-for="(item,index) in (tab==='mine'?myQueue:queue)" :key="item.id" class="song queue"><span class="rank">{{index+1}}</span><div><h4>{{item.song.title}}</h4><p>{{item.song.artistDisplayName}} · {{item.requestedBy}} 点</p></div><button v-if="item.guestSessionId===session.id" class="remove" @click="remove(item)">删除</button></article>
+      <article v-for="(item,index) in (tab==='mine'?myQueue:queue)" :key="item.id" class="song queue"><span class="rank">{{index+1}}</span><div><h4>{{item.song.title}}</h4><p>{{item.song.artistDisplayName}} · {{item.requestedBy}} 点</p></div><div v-if="item.isMine" class="queue-actions"><button aria-label="上移" @click="move(item,-1)">↑</button><button aria-label="下移" @click="move(item,1)">↓</button><button class="remove" @click="remove(item)">删除</button></div></article>
     </section>
     <nav><button :class="{active:tab==='songs'}" @click="tab='songs'"><span>⌕</span>点歌</button><button :class="{active:tab==='queue'}" @click="tab='queue'"><span>≡</span>队列<i v-if="queue.length">{{queue.length}}</i></button><button :class="{active:tab==='mine'}" @click="tab='mine'"><span>♪</span>我的<i v-if="myQueue.length">{{myQueue.length}}</i></button></nav>
     <transition name="toast"><div v-if="message" class="toast">{{message}}</div></transition>

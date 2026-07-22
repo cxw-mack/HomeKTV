@@ -15,8 +15,10 @@ public interface IQueueRepository
     Task<IReadOnlyList<QueueItem>> GetActiveAsync(CancellationToken cancellationToken = default);
     Task<QueueItem> EnqueueAsync(long songId, string sessionId, string requestedBy, CancellationToken cancellationToken = default);
     Task<bool> RemoveAsync(long queueItemId, string? ownerSessionId, bool administrator, CancellationToken cancellationToken = default);
-    Task<bool> PinAsync(long queueItemId, CancellationToken cancellationToken = default);
+    Task<bool> SetPinnedAsync(long queueItemId, bool pinned, CancellationToken cancellationToken = default);
+    Task<bool> MoveAsync(long queueItemId, int direction, string? ownerSessionId, bool administrator, CancellationToken cancellationToken = default);
     Task ClearAsync(CancellationToken cancellationToken = default);
+    Task<int> RecoverInterruptedAsync(CancellationToken cancellationToken = default);
     Task SetStateAsync(long queueItemId, QueueItemState state, string? error = null, CancellationToken cancellationToken = default);
 }
 
@@ -35,4 +37,3 @@ public interface IPlaybackService : IDisposable
     void SetAudioTrack(int trackId);
     void SetAudioChannel(AudioChannelMode channel);
 }
-

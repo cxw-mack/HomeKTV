@@ -5,6 +5,7 @@ namespace HomeKTV.Infrastructure.Data;
 
 public sealed class HomeKtvDatabase : IAsyncDisposable
 {
+    private readonly SemaphoreSlim _operationGate = new(1, 1);
     private readonly SemaphoreSlim _writeGate = new(1, 1);
     private bool _disposed;
 
@@ -49,7 +50,9 @@ public sealed class HomeKtvDatabase : IAsyncDisposable
         }, cancellationToken);
     }
 
-    public async Task<SqliteConnection> OpenConnectionAsync(CancellationToken cancellationToken = default)
+    public Task<SqliteConnection> OpenConnectionAsync(CancellationToken cancellationToken = default) => OpenConnectionCoreAsync(cancellationToken);
+
+    private async Task<SqliteConnection> OpenConnectionCoreAsync(CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         var connection = new SqliteConnection(ConnectionString);
@@ -68,16 +71,40 @@ public sealed class HomeKtvDatabase : IAsyncDisposable
         }
     }
 
-    public async Task<T> WriteAsync<T>(Func<SqliteConnection, SqliteTransaction, CancellationToken, Task<T>> action, CancellationToken cancellationToken = default)
+    public async Task<T> ReadAsync<T>(Func<SqliteConnection, CancellationToken, Task<T>> action, CancellationToken cancellationToken = default)
     {
-        await _writeGate.WaitAsync(cancellationToken);
+        ArgumentNullException.ThrowIfNull(action);
+        await _operationGate.WaitAsync(cancellationToken);
         try
         {
-            await using var connection = await OpenConnectionAsync(cancellationToken);
-            await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
-            var result = await action(connection, (SqliteTransaction)transaction, cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
-            return result;
+            await using var connection = await OpenConnectionCoreAsync(cancellationToken);
+            return await action(connection, cancellationToken);
+        }
+        finally
+        {
+            _operationGate.Release();
+        }
+    }
+
+    public async Task<T> WriteAsync<T>(Func<SqliteConnection, SqliteTransaction, CancellationToken, Task<T>> action, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        await _operationGate.WaitAsync(cancellationToken);
+        try
+        {
+            await _writeGate.WaitAsync(cancellationToken);
+            try
+            {
+                await using var connection = await OpenConnectionCoreAsync(cancellationToken);
+                await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+                var result = await action(connection, (SqliteTransaction)transaction, cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                return result;
+            }
+            finally
+            {
+                _writeGate.Release();
+            }
         }
         catch (SqliteException exception) when (exception.SqliteErrorCode is 5 or 6 or 10 or 13 or 14)
         {
@@ -85,7 +112,23 @@ public sealed class HomeKtvDatabase : IAsyncDisposable
         }
         finally
         {
-            _writeGate.Release();
+            _operationGate.Release();
+        }
+    }
+
+    public async Task<T> ExclusiveAsync<T>(Func<CancellationToken, Task<T>> action, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        await _operationGate.WaitAsync(cancellationToken);
+        try
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            SqliteConnection.ClearAllPools();
+            return await action(cancellationToken);
+        }
+        finally
+        {
+            _operationGate.Release();
         }
     }
 
@@ -93,10 +136,12 @@ public sealed class HomeKtvDatabase : IAsyncDisposable
     {
         try
         {
-            await using var connection = await OpenConnectionAsync(cancellationToken);
-            var command = connection.CreateCommand();
-            command.CommandText = "PRAGMA quick_check;";
-            return string.Equals(Convert.ToString(await command.ExecuteScalarAsync(cancellationToken)), "ok", StringComparison.OrdinalIgnoreCase);
+            return await ReadAsync(async (connection, ct) =>
+            {
+                var command = connection.CreateCommand();
+                command.CommandText = "PRAGMA quick_check;";
+                return string.Equals(Convert.ToString(await command.ExecuteScalarAsync(ct)), "ok", StringComparison.OrdinalIgnoreCase);
+            }, cancellationToken);
         }
         catch (SqliteException)
         {
@@ -107,6 +152,7 @@ public sealed class HomeKtvDatabase : IAsyncDisposable
     public ValueTask DisposeAsync()
     {
         _disposed = true;
+        _operationGate.Dispose();
         _writeGate.Dispose();
         SqliteConnection.ClearAllPools();
         return ValueTask.CompletedTask;
@@ -164,4 +210,3 @@ public sealed class HomeKtvDatabase : IAsyncDisposable
         CREATE INDEX IF NOT EXISTS IX_QueueItems_StatePosition ON QueueItems(State, IsPinned DESC, Position);
         """;
 }
-

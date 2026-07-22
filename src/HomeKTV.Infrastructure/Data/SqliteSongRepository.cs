@@ -8,43 +8,47 @@ public sealed class SqliteSongRepository(HomeKtvDatabase database) : ISongReposi
 {
     public async Task<IReadOnlyList<Song>> SearchAsync(string? query, string? language = null, int limit = 100, CancellationToken cancellationToken = default)
     {
-        await using var connection = await database.OpenConnectionAsync(cancellationToken);
-        var command = connection.CreateCommand();
-        var normalized = (query ?? string.Empty).Trim();
-        command.CommandText = """
+        return await database.ReadAsync(async (connection, ct) =>
+        {
+            var command = connection.CreateCommand();
+            var normalized = (query ?? string.Empty).Trim();
+            command.CommandText = """
             SELECT Id, Title, ArtistDisplayName, Pinyin, PinyinInitials, Alias, Language, CategoryId,
                    VideoRelativePath, LyricRelativePath, CoverRelativePath, DurationMs, Width, Height, FileSize, FileHash,
                    OriginalAudioTrack, AccompanimentAudioTrack, DefaultAudioMode, LyricOffsetMs, PlayCount, IsFavorite,
                    CreatedAt, UpdatedAt, LastPlayedAt, IsAvailable
             FROM Songs
-            WHERE ($query = '' OR Title LIKE $pattern COLLATE NOCASE OR ArtistDisplayName LIKE $pattern COLLATE NOCASE
-                   OR Pinyin LIKE $pattern COLLATE NOCASE OR PinyinInitials LIKE $pattern COLLATE NOCASE OR Alias LIKE $pattern COLLATE NOCASE)
+            WHERE ($query = '' OR Title LIKE $pattern ESCAPE '\' COLLATE NOCASE OR ArtistDisplayName LIKE $pattern ESCAPE '\' COLLATE NOCASE
+                   OR Pinyin LIKE $pattern ESCAPE '\' COLLATE NOCASE OR PinyinInitials LIKE $pattern ESCAPE '\' COLLATE NOCASE OR Alias LIKE $pattern ESCAPE '\' COLLATE NOCASE)
               AND ($language = '' OR Language = $language)
             ORDER BY IsFavorite DESC, PlayCount DESC, UpdatedAt DESC LIMIT $limit;
             """;
-        command.Parameters.AddWithValue("$query", normalized);
-        command.Parameters.AddWithValue("$pattern", $"%{EscapeLike(normalized)}%");
-        command.Parameters.AddWithValue("$language", language ?? string.Empty);
-        command.Parameters.AddWithValue("$limit", Math.Clamp(limit, 1, 500));
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        var songs = new List<Song>();
-        while (await reader.ReadAsync(cancellationToken)) songs.Add(ReadSong(reader));
-        return songs;
+            command.Parameters.AddWithValue("$query", normalized);
+            command.Parameters.AddWithValue("$pattern", $"%{EscapeLike(normalized)}%");
+            command.Parameters.AddWithValue("$language", language ?? string.Empty);
+            command.Parameters.AddWithValue("$limit", Math.Clamp(limit, 1, 5000));
+            await using var reader = await command.ExecuteReaderAsync(ct);
+            var songs = new List<Song>();
+            while (await reader.ReadAsync(ct)) songs.Add(ReadSong(reader));
+            return songs;
+        }, cancellationToken);
     }
 
     public async Task<Song?> GetAsync(long id, CancellationToken cancellationToken = default)
     {
-        await using var connection = await database.OpenConnectionAsync(cancellationToken);
-        var command = connection.CreateCommand();
-        command.CommandText = "SELECT * FROM Songs WHERE Id=$id;";
-        command.Parameters.AddWithValue("$id", id);
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        return await reader.ReadAsync(cancellationToken) ? ReadSong(reader) : null;
+        return await database.ReadAsync(async (connection, ct) =>
+        {
+            var command = connection.CreateCommand();
+            command.CommandText = "SELECT * FROM Songs WHERE Id=$id;";
+            command.Parameters.AddWithValue("$id", id);
+            await using var reader = await command.ExecuteReaderAsync(ct);
+            return await reader.ReadAsync(ct) ? ReadSong(reader) : null;
+        }, cancellationToken);
     }
 
     public Task<long> UpsertAsync(Song song, CancellationToken cancellationToken = default)
     {
-        ValidateRelative(song.VideoRelativePath, nameof(song.VideoRelativePath));
+        ValidateRelative(song.VideoRelativePath, nameof(song.VideoRelativePath), required: true);
         ValidateRelative(song.LyricRelativePath, nameof(song.LyricRelativePath));
         ValidateRelative(song.CoverRelativePath, nameof(song.CoverRelativePath));
         var now = DateTimeOffset.UtcNow;
@@ -78,13 +82,19 @@ public sealed class SqliteSongRepository(HomeKtvDatabase database) : ISongReposi
             return 0;
         }, cancellationToken);
 
-    private static void ValidateRelative(string? value, string parameterName)
+    private void ValidateRelative(string? value, string parameterName, bool required = false)
     {
-        if (!string.IsNullOrWhiteSpace(value) && Path.IsPathRooted(value))
-            throw new ArgumentException("数据库媒体路径必须是相对路径。", parameterName);
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            if (required) throw new ArgumentException("歌曲必须包含便携目录内的媒体路径。", parameterName);
+            return;
+        }
+        try { _ = database.Paths.Resolve(value); }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+        { throw new ArgumentException("数据库媒体路径必须位于便携版根目录内。", parameterName, exception); }
     }
 
-    private static string EscapeLike(string input) => input.Replace("[", "[[]", StringComparison.Ordinal).Replace("%", "[%]", StringComparison.Ordinal).Replace("_", "[_]", StringComparison.Ordinal);
+    private static string EscapeLike(string input) => input.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("%", "\\%", StringComparison.Ordinal).Replace("_", "\\_", StringComparison.Ordinal);
 
     internal static Song ReadSong(SqliteDataReader reader) => new()
     {
@@ -126,4 +136,3 @@ public sealed class SqliteSongRepository(HomeKtvDatabase database) : ISongReposi
     private const string InsertSql = "INSERT INTO Songs(" + ColumnsAndValues + "; SELECT last_insert_rowid();";
     private const string UpdateSql = "UPDATE Songs SET Title=$title,ArtistDisplayName=$artist,Pinyin=$pinyin,PinyinInitials=$initials,Alias=$alias,Language=$language,CategoryId=$category,VideoRelativePath=$video,LyricRelativePath=$lyric,CoverRelativePath=$cover,DurationMs=$duration,Width=$width,Height=$height,FileSize=$size,FileHash=$hash,OriginalAudioTrack=$original,AccompanimentAudioTrack=$accompaniment,DefaultAudioMode=$audioMode,LyricOffsetMs=$offset,PlayCount=$plays,IsFavorite=$favorite,CreatedAt=$created,UpdatedAt=$updated,LastPlayedAt=$lastPlayed,IsAvailable=$available WHERE Id=$id; SELECT $id;";
 }
-

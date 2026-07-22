@@ -1,6 +1,9 @@
 using System.Windows;
 using System.Windows.Threading;
 using System.IO;
+using System.Net.Http;
+using System.Security.Cryptography;
+using System.Text;
 using HomeKTV.App.ViewModels;
 using HomeKTV.Core.Portable;
 using HomeKTV.Infrastructure.Configuration;
@@ -16,11 +19,14 @@ namespace HomeKTV.App;
 public partial class App : System.Windows.Application
 {
     private HomeKtvDatabase? _database;private HomeKtvWebServer? _server;private LibVlcPlaybackService? _player;private ILogger? _logger;
+    private Mutex? _instanceMutex;private bool _ownsInstance;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);ShutdownMode=ShutdownMode.OnExplicitShutdown;
-        var paths=PortablePaths.FromBaseDirectory();paths.EnsureDirectories();_logger=LoggingBootstrap.CreateLogger(paths);Log.Logger=_logger;
+        var paths=PortablePaths.FromBaseDirectory();paths.EnsureDirectories();
+        if(!TryAcquireSingleInstance(paths.Root)){if(!e.Args.Contains("--health-check",StringComparer.OrdinalIgnoreCase))MessageBox.Show("此便携目录中的 HomeKTV 已经在运行。请切换到现有窗口，不要重复启动。","HomeKTV 已运行",MessageBoxButton.OK,MessageBoxImage.Information);Shutdown(2);return;}
+        _logger=LoggingBootstrap.CreateLogger(paths);Log.Logger=_logger;
         DispatcherUnhandledException+=OnDispatcherException;AppDomain.CurrentDomain.UnhandledException+=OnDomainException;TaskScheduler.UnobservedTaskException+=OnTaskException;
         try
         {
@@ -29,6 +35,7 @@ public partial class App : System.Windows.Application
             _database=new HomeKtvDatabase(paths);await _database.InitializeAsync();
             if(!await _database.QuickCheckAsync())throw new InvalidDataException("数据库完整性检查失败。请从 Data/Backups 恢复备份。\n");
             var songs=new SqliteSongRepository(_database);var queue=new SqliteQueueRepository(_database);var backups=new DatabaseBackupService(_database,paths);
+            var recovered=await queue.RecoverInterruptedAsync();if(recovered>0)_logger.Warning("Recovered {Count} interrupted queue items to waiting state",recovered);
             var inspector=new FfprobeMediaInspector(Path.Combine(paths.Ffmpeg,"ffprobe.exe"));var importer=new LocalMediaImporter(paths,_database,songs,inspector);
             string? demoPlaybackPath=null;
             if(e.Args.Contains("--import-demo",StringComparer.OrdinalIgnoreCase))
@@ -48,7 +55,13 @@ public partial class App : System.Windows.Application
             if(loaded.Settings.MobileOrderingEnabled)
             {
                 try{_server=new HomeKtvWebServer(paths,loaded.Settings,songs,queue);await _server.StartAsync();_logger.Information("Mobile server listening at {Address}",_server.LanAddress);}
-                catch(Exception exception){_logger.Error(exception,"Mobile server failed to start");MessageBox.Show("手机点歌服务启动失败，桌面点歌仍可使用。\n"+exception.Message,"网络服务",MessageBoxButton.OK,MessageBoxImage.Warning);}
+                catch(Exception exception){_logger.Error(exception,"Mobile server failed to start");if(e.Args.Contains("--smoke-ui",StringComparer.OrdinalIgnoreCase)||e.Args.Contains("--server-smoke",StringComparer.OrdinalIgnoreCase))throw;MessageBox.Show("手机点歌服务启动失败，桌面点歌仍可使用。\n"+exception.Message,"网络服务",MessageBoxButton.OK,MessageBoxImage.Warning);}
+            }
+            if(e.Args.Contains("--server-smoke",StringComparer.OrdinalIgnoreCase))
+            {
+                if(_server is null)throw new InvalidOperationException("手机点歌服务未启动。");
+                using var client=new HttpClient{BaseAddress=new Uri(_server.LocalAddress),Timeout=TimeSpan.FromSeconds(10)};
+                using var response=await client.GetAsync("health");response.EnsureSuccessStatusCode();_logger.Information("Mobile server health smoke completed at {Address}",_server.LocalAddress);Shutdown(0);return;
             }
             var viewModel=new MainViewModel(paths,loaded.Settings,_database,songs,queue,importer,backups,settingsStore,_player,_server,_logger);
             var window=new MainWindow(viewModel);MainWindow=window;ShutdownMode=ShutdownMode.OnMainWindowClose;window.Show();
@@ -77,7 +90,16 @@ public partial class App : System.Windows.Application
             _player?.Dispose();_logger?.Information("HomeKTV shutdown completed");
         }
         catch(Exception exception){_logger?.Error(exception,"Error while shutting down HomeKTV");}
-        finally{(_logger as IDisposable)?.Dispose();Log.CloseAndFlush();}
+        finally{(_logger as IDisposable)?.Dispose();Log.CloseAndFlush();if(_ownsInstance){try{_instanceMutex?.ReleaseMutex();}catch(ApplicationException){} }_instanceMutex?.Dispose();}
         base.OnExit(e);
+    }
+
+    private bool TryAcquireSingleInstance(string root)
+    {
+        var hash=Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(root.ToUpperInvariant())))[..24];
+        _instanceMutex=new Mutex(false,$@"Local\HomeKTV-{hash}");
+        try{_ownsInstance=_instanceMutex.WaitOne(0,false);}
+        catch(AbandonedMutexException){_ownsInstance=true;}
+        return _ownsInstance;
     }
 }

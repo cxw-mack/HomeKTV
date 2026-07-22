@@ -12,6 +12,7 @@ public static class NetworkAddressService
         {
             return NetworkInterface.GetAllNetworkInterfaces()
                 .Where(x=>x.OperationalStatus==OperationalStatus.Up && x.NetworkInterfaceType!=NetworkInterfaceType.Loopback && x.NetworkInterfaceType!=NetworkInterfaceType.Tunnel)
+                .OrderBy(x=>x.NetworkInterfaceType==NetworkInterfaceType.Wireless80211?0:x.NetworkInterfaceType==NetworkInterfaceType.Ethernet?1:2)
                 .SelectMany(x=>x.GetIPProperties().UnicastAddresses)
                 .Where(x=>x.Address.AddressFamily==AddressFamily.InterNetwork && !IPAddress.IsLoopback(x.Address))
                 .OrderBy(x=>x.Address.ToString().StartsWith("169.254.",StringComparison.Ordinal)?1:0)
@@ -20,14 +21,43 @@ public static class NetworkAddressService
         catch (NetworkInformationException) { return "127.0.0.1"; }
     }
 
-    public static int FindAvailablePort(int preferred, int attempts=20)
+    public static int FindAvailablePort(int preferred, int attempts=20,bool anyIp=false)
     {
-        for(var port=Math.Clamp(preferred,1024,65535);port<=65535 && port<preferred+attempts;port++)
+        var start=Math.Clamp(preferred,1024,65535);
+        var count=Math.Clamp(attempts,1,100);
+        for(var offset=0;offset<count&&start+offset<=65535;offset++)
         {
-            try { var listener=new TcpListener(IPAddress.Loopback,port);listener.Start();listener.Stop();return port; }
-            catch(SocketException) { }
+            var port=start+offset;
+            if(CanBind(port,anyIp))return port;
         }
-        throw new IOException("没有可用的手机点歌端口。\n");
+        throw new IOException("没有可用的手机点歌端口。");
+    }
+
+    private static bool CanBind(int port,bool anyIp)
+    {
+        if(anyIp)
+        {
+            try
+            {
+                using var socket=new Socket(AddressFamily.InterNetworkV6,SocketType.Stream,ProtocolType.Tcp){DualMode=true,ExclusiveAddressUse=true};
+                socket.Bind(new IPEndPoint(IPAddress.IPv6Any,port));socket.Listen(1);return true;
+            }
+            catch(SocketException){return false;}
+            catch(NotSupportedException){return CanBindIpv4(port,IPAddress.Any);}
+        }
+        if(!CanBindIpv4(port,IPAddress.Loopback))return false;
+        try
+        {
+            using var socket=new Socket(AddressFamily.InterNetworkV6,SocketType.Stream,ProtocolType.Tcp){ExclusiveAddressUse=true};
+            socket.Bind(new IPEndPoint(IPAddress.IPv6Loopback,port));socket.Listen(1);return true;
+        }
+        catch(NotSupportedException){return true;}
+        catch(SocketException){return false;}
+    }
+
+    private static bool CanBindIpv4(int port,IPAddress address)
+    {
+        try{using var socket=new Socket(AddressFamily.InterNetwork,SocketType.Stream,ProtocolType.Tcp){ExclusiveAddressUse=true};socket.Bind(new IPEndPoint(address,port));socket.Listen(1);return true;}
+        catch(SocketException){return false;}
     }
 }
-

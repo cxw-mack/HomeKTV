@@ -35,7 +35,13 @@ public sealed class QueuePlannerTests
         Assert.Equal(2, QueuePlanner.Order([regular, pinned], QueueOrderingMode.FairRotation)[0].Id);
     }
 
+    [Fact]
+    public void CurrentlyPlayingItemStaysVisibleBeforeWaitingQueue()
+    {
+        var start=DateTimeOffset.UtcNow;var playing=Item(9,"A",start);playing.State=QueueItemState.Playing;var waiting=Item(1,"B",start.AddSeconds(1));
+        Assert.Equal([9L,1L],QueuePlanner.Order([waiting,playing],QueueOrderingMode.FairRotation).Select(x=>x.Id));
+    }
+
     private static QueueItem Item(long id, string guest, DateTimeOffset requestedAt) =>
         new() { Id = id, GuestSessionId = guest, RequestedBy = guest, RequestedAt = requestedAt, Position = id };
 }
-
