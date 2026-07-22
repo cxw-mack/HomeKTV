@@ -62,8 +62,12 @@ public partial class App : System.Windows.Application
             if(e.Args.Contains("--server-smoke",StringComparer.OrdinalIgnoreCase))
             {
                 if(_server is null)throw new InvalidOperationException("手机点歌服务未启动。");
-                using var client=new HttpClient{BaseAddress=new Uri(_server.LocalAddress),Timeout=TimeSpan.FromSeconds(10)};
-                using var response=await client.GetAsync("health");response.EnsureSuccessStatusCode();_logger.Information("Mobile server health smoke completed at {Address}",_server.LocalAddress);Shutdown(0);return;
+                foreach(var address in new[]{_server.LocalAddress,_server.LanAddress}.Distinct(StringComparer.OrdinalIgnoreCase))
+                {
+                    using var client=new HttpClient{BaseAddress=new Uri(address),Timeout=TimeSpan.FromSeconds(10)};
+                    using var response=await client.GetAsync("health");response.EnsureSuccessStatusCode();_logger.Information("Mobile server health smoke completed at {Address}",address);
+                }
+                Shutdown(0);return;
             }
             _automaticBackup=new AutomaticBackupCoordinator(backups,paths,loaded.Settings.AutomaticBackupHours,_logger);_automaticBackup.Start();
             var viewModel=new MainViewModel(paths,loaded.Settings,_database,songs,queue,importer,httpDownload,transcode,mediaInspection,backups,settingsStore,_player,_server,_logger);
@@ -88,13 +92,20 @@ public partial class App : System.Windows.Application
     {
         try
         {
-            _logger?.Information("HomeKTV shutdown started");var server=_server;var database=_database;
-            var automaticBackup=_automaticBackup;Task.Run(async()=>{if(server is not null)await server.DisposeAsync();if(automaticBackup is not null)await automaticBackup.DisposeAsync();if(database is not null)await database.DisposeAsync();}).GetAwaiter().GetResult();
-            _player?.Dispose();_logger?.Information("HomeKTV shutdown completed");
+            _logger?.Information("HomeKTV shutdown started");
+            try{_player?.Dispose();}catch(Exception exception){_logger?.Error(exception,"Error while disposing LibVLC");}
+            try{Task.Run(ShutdownServicesAsync).GetAwaiter().GetResult();}catch(Exception exception){_logger?.Error(exception,"Unexpected error while shutting down HomeKTV services");}
+            _logger?.Information("HomeKTV shutdown completed");
         }
-        catch(Exception exception){_logger?.Error(exception,"Error while shutting down HomeKTV");}
         finally{(_logger as IDisposable)?.Dispose();Log.CloseAndFlush();if(_ownsInstance){try{_instanceMutex?.ReleaseMutex();}catch(ApplicationException){} }_instanceMutex?.Dispose();}
         base.OnExit(e);
+    }
+
+    private async Task ShutdownServicesAsync()
+    {
+        try{if(_server is not null)await _server.DisposeAsync();}catch(Exception exception){_logger?.Error(exception,"Error while stopping mobile server");}
+        try{if(_automaticBackup is not null)await _automaticBackup.DisposeAsync();}catch(Exception exception){_logger?.Error(exception,"Error while stopping automatic backup");}
+        try{if(_database is not null)await _database.DisposeAsync();}catch(Exception exception){_logger?.Error(exception,"Error while disposing database");}
     }
 
     private bool TryAcquireSingleInstance(string root)

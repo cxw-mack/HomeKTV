@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.ComponentModel;
 using System.Globalization;
 using HomeKTV.Core.Portable;
 
@@ -24,7 +25,7 @@ public sealed class FfmpegTranscodeService(PortablePaths paths)
             var start=new ProcessStartInfo{FileName=FfmpegPath,UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true};
             foreach(var argument in new[]{"-hide_banner","-y","-i",inputPath,"-map","0:v:0","-map","0:a?","-c:v","libx264","-preset","medium","-crf","20","-c:a","aac","-b:a","192k","-movflags","+faststart","-progress","pipe:1","-nostats",temporary})start.ArgumentList.Add(argument);
             using var process=Process.Start(start)??throw new InvalidOperationException("无法启动 FFmpeg。");
-            using var registration=cancellationToken.Register(()=>{try{if(!process.HasExited)process.Kill(true);}catch(InvalidOperationException){}});
+            using var registration=cancellationToken.Register(()=>TryKill(process));
             var errorTask=process.StandardError.ReadToEndAsync(cancellationToken);string? line;
             while((line=await process.StandardOutput.ReadLineAsync(cancellationToken)) is not null)
             {
@@ -41,4 +42,5 @@ public sealed class FfmpegTranscodeService(PortablePaths paths)
     }
 
     private static string UniqueTarget(string directory,string stem,string extension){var target=Path.Combine(directory,stem+extension);var index=2;while(File.Exists(target))target=Path.Combine(directory,$"{stem} ({index++}){extension}");return target;}
+    private static void TryKill(Process process){try{if(!process.HasExited)process.Kill(true);}catch(InvalidOperationException){}catch(Win32Exception){}}
 }

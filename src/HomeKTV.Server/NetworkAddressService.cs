@@ -12,11 +12,14 @@ public static class NetworkAddressService
         {
             return NetworkInterface.GetAllNetworkInterfaces()
                 .Where(x=>x.OperationalStatus==OperationalStatus.Up && x.NetworkInterfaceType!=NetworkInterfaceType.Loopback && x.NetworkInterfaceType!=NetworkInterfaceType.Tunnel)
-                .OrderBy(x=>x.NetworkInterfaceType==NetworkInterfaceType.Wireless80211?0:x.NetworkInterfaceType==NetworkInterfaceType.Ethernet?1:2)
-                .SelectMany(x=>x.GetIPProperties().UnicastAddresses)
-                .Where(x=>x.Address.AddressFamily==AddressFamily.InterNetwork && !IPAddress.IsLoopback(x.Address))
-                .OrderBy(x=>x.Address.ToString().StartsWith("169.254.",StringComparison.Ordinal)?1:0)
-                .Select(x=>x.Address.ToString()).FirstOrDefault() ?? "127.0.0.1";
+                .Select(x=>new{Adapter=x,Properties=x.GetIPProperties()})
+                .SelectMany(x=>x.Properties.UnicastAddresses
+                    .Where(a=>a.Address.AddressFamily==AddressFamily.InterNetwork&&!IPAddress.IsLoopback(a.Address))
+                    .Select(a=>new{Address=a.Address.ToString(),HasGateway=x.Properties.GatewayAddresses.Any(g=>g.Address.AddressFamily==AddressFamily.InterNetwork&&!g.Address.Equals(IPAddress.Any)),Type=x.Adapter.NetworkInterfaceType}))
+                .OrderByDescending(x=>x.HasGateway)
+                .ThenBy(x=>x.Address.StartsWith("169.254.",StringComparison.Ordinal)?1:0)
+                .ThenBy(x=>x.Type is NetworkInterfaceType.Ethernet or NetworkInterfaceType.Wireless80211?0:1)
+                .Select(x=>x.Address).FirstOrDefault() ?? "127.0.0.1";
         }
         catch (NetworkInformationException) { return "127.0.0.1"; }
     }

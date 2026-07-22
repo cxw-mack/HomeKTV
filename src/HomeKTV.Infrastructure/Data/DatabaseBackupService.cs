@@ -9,7 +9,7 @@ public sealed class DatabaseBackupService(HomeKtvDatabase database, PortablePath
     {
         if(!File.Exists(path))return false;
         try{await using var connection=new SqliteConnection(new SqliteConnectionStringBuilder{DataSource=path,Mode=SqliteOpenMode.ReadOnly,Pooling=false}.ToString());await connection.OpenAsync(cancellationToken);var command=connection.CreateCommand();command.CommandText="PRAGMA quick_check;";return string.Equals(Convert.ToString(await command.ExecuteScalarAsync(cancellationToken)),"ok",StringComparison.OrdinalIgnoreCase);}
-        catch(SqliteException){return false;}
+        catch(Exception exception) when(exception is SqliteException or IOException or UnauthorizedAccessException){return false;}
     }
 
     public async Task<string> BackupAsync(string reason, CancellationToken cancellationToken = default)

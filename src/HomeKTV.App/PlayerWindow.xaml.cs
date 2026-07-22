@@ -28,8 +28,9 @@ public partial class PlayerWindow : Window
 
     private void PlaceOnPreferredScreen()
     {
-        var screens=Screen.AllScreens;_displayIndex=Math.Clamp(_displayIndex,0,screens.Length-1);var target=screens[_displayIndex];
-        if(_viewModel.Settings.PlaybackFullscreen){WindowStyle=WindowStyle.None;ResizeMode=ResizeMode.NoResize;Topmost=true;WindowState=WindowState.Normal;UpdateLayout();SetWindowPos(new WindowInteropHelper(this).Handle,IntPtr.Zero,target.Bounds.Left,target.Bounds.Top,target.Bounds.Width,target.Bounds.Height,0x0040);}
+        var screens=Screen.AllScreens;if(screens.Length==0)return;_displayIndex=Math.Clamp(_displayIndex,0,screens.Length-1);var target=screens[_displayIndex];
+        var useFullscreen=_viewModel.Settings.PlaybackFullscreen&&screens.Length>1;
+        if(useFullscreen){WindowStyle=WindowStyle.None;ResizeMode=ResizeMode.NoResize;Topmost=true;WindowState=WindowState.Normal;UpdateLayout();SetWindowPos(new WindowInteropHelper(this).Handle,IntPtr.Zero,target.Bounds.Left,target.Bounds.Top,target.Bounds.Width,target.Bounds.Height,0x0040);}
         else{WindowStyle=WindowStyle.SingleBorderWindow;ResizeMode=ResizeMode.CanResize;Topmost=false;WindowState=WindowState.Normal;UpdateLayout();var area=target.WorkingArea;var width=Math.Min(1280,area.Width);var height=Math.Min(720,area.Height);SetWindowPos(new WindowInteropHelper(this).Handle,IntPtr.Zero,area.Left+(area.Width-width)/2,area.Top+(area.Height-height)/2,width,height,0x0040);}
     }
 
@@ -39,7 +40,7 @@ public partial class PlayerWindow : Window
     {
         try
         {
-            var active=_viewModel.CurrentTitle!="等待点歌";VideoView.Visibility=active?Visibility.Visible:Visibility.Collapsed;IdlePanel.Visibility=active?Visibility.Collapsed:Visibility.Visible;
+            var active=_viewModel.CurrentTitle!="等待点歌";PlaybackOverlay.Visibility=active?Visibility.Visible:Visibility.Collapsed;IdlePanel.Visibility=active?Visibility.Collapsed:Visibility.Visible;
             if(_loadedLyric!=_viewModel.CurrentLyricRelativePath){_loadedLyric=_viewModel.CurrentLyricRelativePath;_lyrics=string.IsNullOrWhiteSpace(_loadedLyric)?LrcParser.Parse(null):await LrcParser.ParseFileAsync(_viewModel.ResolvePortablePath(_loadedLyric));}
             var position=_lyrics.Locate(TimeSpan.FromMilliseconds(_viewModel.PlaybackPositionMs),_viewModel.CurrentLyricOffsetMs);PreviousLyric.Text=position.Previous?.Text??"";CurrentLyric.Text=position.Current?.Text??(_loadedLyric is null?"暂无同步歌词":"");NextLyric.Text=position.Next?.Text??"";
         }

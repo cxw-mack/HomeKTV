@@ -19,7 +19,8 @@ public sealed class LibVlcPlaybackService : IPlaybackService
             throw new DirectoryNotFoundException("未找到 LibVLC 运行库。请重新解压完整的 HomeKTV 便携包。\n");
         LibVLCSharp.Shared.Core.Initialize(nativeDirectory);
         _libVlc = new LibVLC("--no-video-title-show", "--quiet", "--file-caching=1000");
-        MediaPlayer = new MediaPlayer(_libVlc) { EnableHardwareDecoding = true };
+        try{MediaPlayer = new MediaPlayer(_libVlc) { EnableHardwareDecoding = true };}
+        catch{_libVlc.Dispose();throw;}
         MediaPlayer.EndReached += (_, _) => PlaybackEnded?.Invoke(this, EventArgs.Empty);
         MediaPlayer.EncounteredError += (_, _) => PlaybackFailed?.Invoke(this, "VLC 无法解码或读取当前媒体。");
     }
@@ -36,6 +37,7 @@ public sealed class LibVlcPlaybackService : IPlaybackService
         ObjectDisposedException.ThrowIf(_disposed, this);
         cancellationToken.ThrowIfCancellationRequested();
         if (!File.Exists(absoluteMediaPath)) throw new FileNotFoundException("找不到 MV 文件，请在媒体检查页重新定位或导入。", absoluteMediaPath);
+        MediaPlayer.Stop();
         _currentMedia?.Dispose();
         _currentMedia = new Media(_libVlc, new Uri(Path.GetFullPath(absoluteMediaPath)));
         if (!MediaPlayer.Play(_currentMedia)) throw new InvalidOperationException("VLC 未能开始播放媒体。\n");

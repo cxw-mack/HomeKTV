@@ -163,6 +163,22 @@ public sealed class DatabaseIntegrationTests
     }
 
     [Fact]
+    public async Task AutomaticBackupShutdownDoesNotDependOnUiSynchronizationContext()
+    {
+        await using var fixture=await TestDatabase.CreateAsync();using var logger=new LoggerConfiguration().CreateLogger();var entered=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);var release=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var hold=fixture.Database.ExclusiveAsync(async _=>{entered.TrySetResult();await release.Task;return 0;});await entered.Task;var previous=SynchronizationContext.Current;var coordinator=new AutomaticBackupCoordinator(new DatabaseBackupService(fixture.Database,fixture.Paths),fixture.Paths,24,logger);var disposed=false;
+        try{SynchronizationContext.SetSynchronizationContext(new NonPumpingSynchronizationContext());coordinator.Start();var dispose=coordinator.DisposeAsync().AsTask();SynchronizationContext.SetSynchronizationContext(previous);release.TrySetResult();await hold;await dispose.WaitAsync(TimeSpan.FromSeconds(5));disposed=true;}
+        finally{SynchronizationContext.SetSynchronizationContext(previous);release.TrySetResult();if(!disposed)await coordinator.DisposeAsync();}
+    }
+
+    [Fact]
+    public async Task DatabaseAndAutomaticBackupDisposalAreIdempotent()
+    {
+        var root=Path.Combine(Path.GetTempPath(),"HomeKTV-dispose-"+Guid.NewGuid().ToString("N"));var paths=new PortablePaths(root);var database=new HomeKtvDatabase(paths);await database.InitializeAsync();using var logger=new LoggerConfiguration().CreateLogger();var coordinator=new AutomaticBackupCoordinator(new DatabaseBackupService(database,paths),paths,24,logger);
+        coordinator.Start();await coordinator.DisposeAsync();await coordinator.DisposeAsync();await database.DisposeAsync();await database.DisposeAsync();Directory.Delete(root,true);
+    }
+
+    [Fact]
     public async Task RestoreRollsDatabaseBackToSelectedValidBackup()
     {
         await using var fixture=await TestDatabase.CreateAsync();var repository=new SqliteSongRepository(fixture.Database);await repository.UpsertAsync(new Song{Title="备份前",ArtistDisplayName="歌手",VideoRelativePath="Media/MV/a.mp4",FileHash="restore-a"});
@@ -196,5 +212,10 @@ public sealed class DatabaseIntegrationTests
         public string Root { get; } public PortablePaths Paths { get; } public HomeKtvDatabase Database { get; }
         public static async Task<TestDatabase> CreateAsync(){var root=Path.Combine(Path.GetTempPath(),"HomeKTV-Db-"+Guid.NewGuid().ToString("N"));var paths=new PortablePaths(root);var db=new HomeKtvDatabase(paths);await db.InitializeAsync();return new(root,paths,db);}
         public async ValueTask DisposeAsync(){await Database.DisposeAsync();if(Directory.Exists(Root))Directory.Delete(Root,true);}
+    }
+
+    private sealed class NonPumpingSynchronizationContext : SynchronizationContext
+    {
+        public override void Post(SendOrPostCallback callback,object? state){}
     }
 }

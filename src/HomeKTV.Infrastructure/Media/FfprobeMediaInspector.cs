@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.ComponentModel;
 using System.Globalization;
 using System.Text.Json;
 
@@ -25,6 +26,7 @@ public sealed class FfprobeMediaInspector(string ffprobePath)
         };
         foreach(var argument in new[]{"-v","error","-show_format","-show_streams","-of","json",mediaPath})start.ArgumentList.Add(argument);
         using var process = Process.Start(start) ?? throw new InvalidOperationException("无法启动 FFprobe。\n");
+        using var registration = cancellationToken.Register(() => TryKill(process));
         var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
         var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
         await process.WaitForExitAsync(cancellationToken);
@@ -63,4 +65,5 @@ public sealed class FfprobeMediaInspector(string ffprobePath)
     private static int GetInt(JsonElement element, string property) => element.TryGetProperty(property, out var value) && value.TryGetInt32(out var result) ? result : 0;
     private static double ParseDouble(string? value) => double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var result) ? result : 0;
     private static double ParseRate(string? value) { var parts=(value??"").Split('/'); return parts.Length==2 && ParseDouble(parts[1])!=0 ? ParseDouble(parts[0])/ParseDouble(parts[1]) : ParseDouble(value); }
+    private static void TryKill(Process process){try{if(!process.HasExited)process.Kill(true);}catch(InvalidOperationException){}catch(Win32Exception){}}
 }

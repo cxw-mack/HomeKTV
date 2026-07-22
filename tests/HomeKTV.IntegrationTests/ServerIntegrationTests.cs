@@ -61,6 +61,17 @@ public sealed class ServerIntegrationTests
         using var request=new HttpRequestMessage(HttpMethod.Delete,"api/admin/queue");request.Headers.Add("X-Admin-Pin","2468");var allowed=await client.SendAsync(request);Assert.Equal(HttpStatusCode.NoContent,allowed.StatusCode);
     }
 
+    [Fact]
+    public async Task LanModeIsReachableThroughAdvertisedIpv4Address()
+    {
+        var root=Path.Combine(Path.GetTempPath(),"HomeKTV-Lan-"+Guid.NewGuid().ToString("N"));var paths=new PortablePaths(root);paths.EnsureDirectories();await File.WriteAllTextAsync(Path.Combine(paths.Web,"index.html"),"ok");var database=new HomeKtvDatabase(paths);HomeKtvWebServer? server=null;
+        try
+        {
+            await database.InitializeAsync();var settings=new HomeKtvSettings{ServerPort=ServerFixture.GetFreePort(IPAddress.Any),LanModeEnabled=true};server=new HomeKtvWebServer(paths,settings,new SqliteSongRepository(database),new SqliteQueueRepository(database));await server.StartAsync();using var client=new HttpClient{BaseAddress=new Uri(server.LanAddress),Timeout=TimeSpan.FromSeconds(10)};var response=await client.GetAsync("health");Assert.Equal(HttpStatusCode.OK,response.StatusCode);Assert.DoesNotContain("localhost",server.LanAddress,StringComparison.OrdinalIgnoreCase);
+        }
+        finally{if(server is not null)await server.DisposeAsync();await database.DisposeAsync();if(Directory.Exists(root))Directory.Delete(root,true);}
+    }
+
     private static async Task<GuestSessionGrantDto> CreateSession(HttpClient client,string nickname)
     {
         var response=await client.PostAsJsonAsync("api/session",new{nickname});response.EnsureSuccessStatusCode();return (await response.Content.ReadFromJsonAsync<GuestSessionGrantDto>())!;
@@ -80,9 +91,9 @@ public sealed class ServerIntegrationTests
         {
             var root=Path.Combine(Path.GetTempPath(),"HomeKTV-Server-"+Guid.NewGuid().ToString("N"));var paths=new PortablePaths(root);paths.EnsureDirectories();await File.WriteAllTextAsync(Path.Combine(paths.Web,"index.html"),"ok");
             var database=new HomeKtvDatabase(paths);await database.InitializeAsync();var songs=new SqliteSongRepository(database);var songId=await songs.UpsertAsync(new Song{Title="海阔天空",ArtistDisplayName="Beyond",PinyinInitials="hktk",VideoRelativePath="Media/MV/test.mp4",FileHash=Guid.NewGuid().ToString("N")});
-            var settings=new HomeKtvSettings{ServerPort=GetFreePort(),LanModeEnabled=false,AdministratorPin="2468"};var server=new HomeKtvWebServer(paths,settings,songs,new SqliteQueueRepository(database));await server.StartAsync();return new(root,database,server,songId);
+            var settings=new HomeKtvSettings{ServerPort=GetFreePort(IPAddress.Loopback),LanModeEnabled=false,AdministratorPin="2468"};var server=new HomeKtvWebServer(paths,settings,songs,new SqliteQueueRepository(database));await server.StartAsync();return new(root,database,server,songId);
         }
-        private static int GetFreePort(){var listener=new TcpListener(IPAddress.Loopback,0);listener.Start();var port=((IPEndPoint)listener.LocalEndpoint).Port;listener.Stop();return port;}
+        public static int GetFreePort(IPAddress address){var listener=new TcpListener(address,0);listener.Start();var port=((IPEndPoint)listener.LocalEndpoint).Port;listener.Stop();return port;}
         public async ValueTask DisposeAsync(){await Server.DisposeAsync();await Database.DisposeAsync();if(Directory.Exists(Root))Directory.Delete(Root,true);}
     }
 }

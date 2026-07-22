@@ -7,7 +7,9 @@ public sealed class HomeKtvDatabase : IAsyncDisposable
 {
     private readonly SemaphoreSlim _operationGate = new(1, 1);
     private readonly SemaphoreSlim _writeGate = new(1, 1);
-    private bool _disposed;
+    private readonly object _disposeSync = new();
+    private Task? _disposeTask;
+    private volatile bool _disposed;
 
     public HomeKtvDatabase(PortablePaths paths)
     {
@@ -74,6 +76,7 @@ public sealed class HomeKtvDatabase : IAsyncDisposable
     public async Task<T> ReadAsync<T>(Func<SqliteConnection, CancellationToken, Task<T>> action, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(action);
+        ObjectDisposedException.ThrowIf(_disposed, this);
         await _operationGate.WaitAsync(cancellationToken);
         try
         {
@@ -89,6 +92,7 @@ public sealed class HomeKtvDatabase : IAsyncDisposable
     public async Task<T> WriteAsync<T>(Func<SqliteConnection, SqliteTransaction, CancellationToken, Task<T>> action, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(action);
+        ObjectDisposedException.ThrowIf(_disposed, this);
         await _operationGate.WaitAsync(cancellationToken);
         try
         {
@@ -119,6 +123,7 @@ public sealed class HomeKtvDatabase : IAsyncDisposable
     public async Task<T> ExclusiveAsync<T>(Func<CancellationToken, Task<T>> action, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(action);
+        ObjectDisposedException.ThrowIf(_disposed, this);
         await _operationGate.WaitAsync(cancellationToken);
         try
         {
@@ -151,11 +156,20 @@ public sealed class HomeKtvDatabase : IAsyncDisposable
 
     public ValueTask DisposeAsync()
     {
+        lock (_disposeSync) return new ValueTask(_disposeTask ??= DisposeCoreAsync());
+    }
+
+    private async Task DisposeCoreAsync()
+    {
         _disposed = true;
-        _operationGate.Dispose();
-        _writeGate.Dispose();
-        SqliteConnection.ClearAllPools();
-        return ValueTask.CompletedTask;
+        await _operationGate.WaitAsync();
+        try { SqliteConnection.ClearAllPools(); }
+        finally
+        {
+            _operationGate.Release();
+            _operationGate.Dispose();
+            _writeGate.Dispose();
+        }
     }
 
     private const string SchemaSql = """
