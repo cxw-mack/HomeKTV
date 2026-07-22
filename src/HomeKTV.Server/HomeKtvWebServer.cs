@@ -32,6 +32,17 @@ public sealed class HomeKtvWebServer : IAsyncDisposable
     public string LanAddress => $"http://{NetworkAddressService.GetPreferredLanAddress()}:{Port}";
     public string LocalAddress => $"http://127.0.0.1:{Port}";
     public bool IsRunning => _app is not null;
+    public event EventHandler? QueueChanged;
+
+    public async Task NotifyQueueChangedAsync(CancellationToken cancellationToken=default)
+    {
+        if(_app is null)return;var hub=_app.Services.GetRequiredService<IHubContext<HomeKtvHub>>();await BroadcastQueueAsync(hub,cancellationToken);
+    }
+
+    public async Task NotifyPlaybackChangedAsync(PlaybackSnapshot snapshot,CancellationToken cancellationToken=default)
+    {
+        _playback.Set(snapshot);if(_app is null)return;var hub=_app.Services.GetRequiredService<IHubContext<HomeKtvHub>>();await hub.Clients.All.SendAsync("playbackChanged",snapshot,cancellationToken);
+    }
 
     public async Task StartAsync(CancellationToken cancellationToken=default)
     {
@@ -80,7 +91,7 @@ public sealed class HomeKtvWebServer : IAsyncDisposable
     }
 
     private IReadOnlyList<QueueItem> Order(IReadOnlyList<QueueItem> items)=>QueuePlanner.Order(items,_settings.QueueOrderingMode);
-    private async Task BroadcastQueueAsync(IHubContext<HomeKtvHub> hub,CancellationToken ct)=>await hub.Clients.All.SendAsync("queueChanged",Order(await _queue.GetActiveAsync(ct)),ct);
+    private async Task BroadcastQueueAsync(IHubContext<HomeKtvHub> hub,CancellationToken ct){await hub.Clients.All.SendAsync("queueChanged",Order(await _queue.GetActiveAsync(ct)),ct);QueueChanged?.Invoke(this,EventArgs.Empty);}
     private bool IsAdmin(HttpRequest request)
     {
         var supplied=request.Headers["X-Admin-Pin"].ToString();var expected=_settings.AdministratorPin??string.Empty;

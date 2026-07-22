@@ -18,7 +18,7 @@ async function order(song:Song){if(!session.value)return;try{await api.enqueue(s
 async function remove(item:QueueItem){if(!session.value||!confirm(`删除《${item.song.title}》？`))return;try{await api.remove(item.id,session.value.id);queue.value=queue.value.filter(x=>x.id!==item.id)}catch(e){notice(e)}}
 async function favorite(song:Song){if(!session.value)return;try{song.isFavorite=!song.isFavorite;await api.favorite(song.id,song.isFavorite,session.value.id)}catch(e){song.isFavorite=!song.isFavorite;notice(e)}}
 function notice(error:unknown){message.value=error instanceof Error?error.message:'操作失败，请稍后重试';setTimeout(()=>message.value='',2800)}
-async function connect(){if(connection)return;connection=new signalR.HubConnectionBuilder().withUrl('/hub').withAutomaticReconnect([0,1000,3000,5000]).build();connection.on('queueChanged',(items:QueueItem[])=>queue.value=items);connection.onreconnecting(()=>online.value=false);connection.onreconnected(()=>{online.value=true;void load()});try{await connection.start();online.value=true}catch{online.value=false}}
+async function connect(){if(connection)return;connection=new signalR.HubConnectionBuilder().withUrl('/hub').withAutomaticReconnect([0,1000,3000,5000]).build();connection.on('queueChanged',(items:QueueItem[])=>queue.value=items);connection.on('playbackChanged',(state:Playback)=>playback.value=state);connection.onreconnecting(()=>online.value=false);connection.onreconnected(()=>{online.value=true;void load()});try{await connection.start();online.value=true}catch{online.value=false}}
 watch([query,language],()=>{clearTimeout(searchTimer);searchTimer=window.setTimeout(()=>void search(),250)})
 onMounted(()=>{window.addEventListener('online',()=>online.value=true);window.addEventListener('offline',()=>online.value=false)})
 onBeforeUnmount(()=>{void connection?.stop()})
@@ -49,4 +49,3 @@ onBeforeUnmount(()=>{void connection?.stop()})
     <transition name="toast"><div v-if="message" class="toast">{{message}}</div></transition>
   </main>
 </template>
-

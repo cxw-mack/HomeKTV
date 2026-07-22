@@ -15,6 +15,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.WindowsDesktop.App.WindowsForms" />
     <PackageReference Include="CommunityToolkit.Mvvm" />
     <PackageReference Include="QRCoder" />
   </ItemGroup>
