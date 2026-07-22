@@ -1,0 +1,8 @@
+<Window x:Class="HomeKTV.App.TranscodeWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="管理员手动转码" Width="650" Height="420" ResizeMode="NoResize" WindowStartupLocation="CenterOwner">
+    <Grid Margin="26"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <StackPanel><TextBlock Text="FFmpeg 手动转为 H.264/AAC" FontSize="24" FontWeight="Bold"/><TextBlock Text="转码不会自动修改歌库记录。默认保留原文件并在同目录生成新 MP4；请检查输出后再决定是否重新导入。" TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,0"/></StackPanel>
+        <StackPanel Grid.Row="1" Margin="0,22,0,0"><TextBlock Text="输入媒体"/><Grid Margin="0,5"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="110"/></Grid.ColumnDefinitions><TextBox x:Name="PathBox" IsReadOnly="True"/><Button Grid.Column="1" Content="选择文件" Click="Choose_Click"/></Grid><CheckBox x:Name="KeepOriginalBox" Content="保留原文件，输出为新文件（推荐）" IsChecked="True" Margin="0,14"/><ProgressBar x:Name="Progress" Height="16" Minimum="0" Maximum="100" Margin="0,18,0,6"/><TextBlock x:Name="StatusText" Text="等待开始" Foreground="{StaticResource MutedBrush}"/></StackPanel>
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right"><Button x:Name="CancelButton" Style="{StaticResource GhostButton}" Content="关闭" Click="Cancel_Click"/><Button x:Name="StartButton" Content="开始转码" Click="Start_Click"/></StackPanel>
+    </Grid>
+</Window>

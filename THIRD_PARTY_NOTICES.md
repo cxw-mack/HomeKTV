@@ -11,6 +11,7 @@ HomeKTV 源码与便携包使用以下固定正式版本。许可证正文或获
 | LibVLCSharp.WPF | 3.10.0 | LGPL-2.1-or-later |
 | VideoLAN.LibVLC.Windows | 3.0.23.1 | LGPL-2.1-or-later / GPL-2.0-or-later（按模块） |
 | QRCoder | 1.8.0 | MIT |
+| ToolGood.Words.Pinyin | 3.1.0.4 | MIT |
 | Serilog | 4.4.0 | Apache-2.0 |
 | Serilog.Sinks.File | 7.0.0 | Apache-2.0 |
 | FFmpeg Windows essentials build | 8.0.1 | GPL-3.0-or-later（此构建启用 GPL 组件） |
@@ -25,4 +26,3 @@ HomeKTV 源码与便携包使用以下固定正式版本。许可证正文或获
 | coverlet.collector | 10.0.1 | MIT |
 
 FFmpeg 仅作为本地媒体检查和管理员主动转码工具分发；HomeKTV 不把它用于获取未授权内容。Vue、SignalR 客户端、样式、字体与图标全部从本地 `Web` 提供，不依赖 CDN。
-

@@ -46,6 +46,13 @@ public sealed class LibVlcPlaybackService : IPlaybackService
     public void Resume() { if (!MediaPlayer.IsPlaying) MediaPlayer.Play(); }
     public void Stop() => MediaPlayer.Stop();
     public void Restart() { MediaPlayer.Time = 0; if (!MediaPlayer.IsPlaying) MediaPlayer.Play(); }
+    public bool TrySetAudioOutputDevice(string deviceId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(deviceId);
+        if(!(MediaPlayer.AudioOutputDeviceEnum??[]).Any(x=>string.Equals(x.DeviceIdentifier,deviceId,StringComparison.Ordinal)))return false;
+        MediaPlayer.SetOutputDevice(deviceId, null);
+        return true;
+    }
     public void SetAudioTrack(int trackId) => MediaPlayer.SetAudioTrack(trackId);
     public void SetAudioChannel(AudioChannelMode channel) => MediaPlayer.SetChannel(channel switch
     {
@@ -56,6 +63,9 @@ public sealed class LibVlcPlaybackService : IPlaybackService
 
     public IReadOnlyList<(int Id, string Name)> GetAudioTracks() =>
         (MediaPlayer.AudioTrackDescription ?? []).Select(x => ((int)x.Id, x.Name)).ToList();
+
+    public IReadOnlyList<string> GetAudioOutputDeviceIds() =>
+        (MediaPlayer.AudioOutputDeviceEnum ?? []).Select(x=>x.DeviceIdentifier).Where(x=>!string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.Ordinal).ToList();
 
     private static string? FindNativeDirectory(PortablePaths paths)
     {

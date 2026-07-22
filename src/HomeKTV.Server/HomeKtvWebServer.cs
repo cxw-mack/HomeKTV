@@ -93,7 +93,12 @@ public sealed class HomeKtvWebServer : IAsyncDisposable
         app.MapGet("/health",()=>Results.Ok(new { status="ok",port=Port,lan=_settings.LanModeEnabled }));
         app.MapPost("/api/session",(CreateSessionRequest request)=> { try{return Results.Ok(_sessions.Create(request.Nickname));}catch(ArgumentException e){return Results.BadRequest(new{error=e.Message});}catch(InvalidOperationException e){return Results.Json(new{error=e.Message},statusCode:429);} });
         app.MapGet("/api/state",async (HttpRequest request,CancellationToken ct)=>{var viewer=Authenticate(request);return Results.Ok(new { playback=_playback.Current,queue=MapQueue(await _queue.GetActiveAsync(ct),viewer?.Id) });});
-        app.MapGet("/api/songs",async (string? q,string? language,int? limit,CancellationToken ct)=>Results.Ok(await _songs.SearchAsync(q,language,limit??100,ct)));
+        app.MapGet("/api/songs",async (string? q,string? language,int? limit,HttpRequest request,CancellationToken ct)=>
+        {
+            var result=await _songs.SearchAsync(q,language,limit??100,ct);var viewer=Authenticate(request);
+            if(viewer is not null){var favorites=await _songs.GetFavoriteSongIdsAsync(viewer.Id,ct);foreach(var song in result)song.IsFavorite=favorites.Contains(song.Id);}
+            return Results.Ok(result);
+        });
         app.MapGet("/api/queue",async (HttpRequest request,CancellationToken ct)=>Results.Ok(MapQueue(await _queue.GetActiveAsync(ct),Authenticate(request)?.Id)));
         app.MapPost("/api/queue",async (EnqueueRequest request,HttpRequest http,IHubContext<HomeKtvHub> hub,CancellationToken ct)=>
         {

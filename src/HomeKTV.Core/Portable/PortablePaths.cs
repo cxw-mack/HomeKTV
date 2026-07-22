@@ -24,6 +24,7 @@ public sealed class PortablePaths
     public string Runtime => Resolve("Runtime");
     public string LibVlc => Resolve("Runtime/LibVLC");
     public string Ffmpeg => Resolve("Runtime/FFmpeg");
+    public string Downloads => Resolve("Runtime/Downloads");
     public string Web => Resolve("Web");
     public string Logs => Resolve("Logs");
     public string Licenses => Resolve("Licenses");
@@ -54,8 +55,7 @@ public sealed class PortablePaths
 
     public void EnsureDirectories()
     {
-        foreach (var directory in new[] { Data, Backups, Mv, Lyrics, Covers, Backgrounds, ImportBox, LibVlc, Ffmpeg, Web, Logs, Licenses })
+        foreach (var directory in new[] { Data, Backups, Mv, Lyrics, Covers, Backgrounds, ImportBox, LibVlc, Ffmpeg, Downloads, Web, Logs, Licenses })
             Directory.CreateDirectory(directory);
     }
 }
-

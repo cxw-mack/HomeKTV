@@ -21,9 +21,9 @@ public sealed class FfprobeMediaInspector(string ffprobePath)
             UseShellExecute = false,
             CreateNoWindow = true,
             RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            Arguments = $"-v error -show_format -show_streams -of json \"{mediaPath.Replace("\"", "\\\"", StringComparison.Ordinal)}\""
+            RedirectStandardError = true
         };
+        foreach(var argument in new[]{"-v","error","-show_format","-show_streams","-of","json",mediaPath})start.ArgumentList.Add(argument);
         using var process = Process.Start(start) ?? throw new InvalidOperationException("无法启动 FFprobe。\n");
         var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
         var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
@@ -64,4 +64,3 @@ public sealed class FfprobeMediaInspector(string ffprobePath)
     private static double ParseDouble(string? value) => double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var result) ? result : 0;
     private static double ParseRate(string? value) { var parts=(value??"").Split('/'); return parts.Length==2 && ParseDouble(parts[1])!=0 ? ParseDouble(parts[0])/ParseDouble(parts[1]) : ParseDouble(value); }
 }
-

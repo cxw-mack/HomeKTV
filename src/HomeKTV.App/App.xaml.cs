@@ -18,7 +18,7 @@ namespace HomeKTV.App;
 
 public partial class App : System.Windows.Application
 {
-    private HomeKtvDatabase? _database;private HomeKtvWebServer? _server;private LibVlcPlaybackService? _player;private ILogger? _logger;
+    private HomeKtvDatabase? _database;private HomeKtvWebServer? _server;private LibVlcPlaybackService? _player;private ILogger? _logger;private AutomaticBackupCoordinator? _automaticBackup;
     private Mutex? _instanceMutex;private bool _ownsInstance;
 
     protected override async void OnStartup(StartupEventArgs e)
@@ -32,11 +32,13 @@ public partial class App : System.Windows.Application
         {
             _logger.Information("HomeKTV starting from portable root {Root}",paths.Root);
             var settingsStore=new JsonSettingsStore(paths);var loaded=await settingsStore.LoadAsync();if(loaded.RecoveryMessage is not null)_logger.Warning("{Recovery}",loaded.RecoveryMessage);
-            _database=new HomeKtvDatabase(paths);await _database.InitializeAsync();
-            if(!await _database.QuickCheckAsync())throw new InvalidDataException("数据库完整性检查失败。请从 Data/Backups 恢复备份。\n");
+            var configuredLogger=LoggingBootstrap.CreateLogger(paths,loaded.Settings.LogLevel);var bootstrapLogger=_logger;_logger=configuredLogger;Log.Logger=configuredLogger;(bootstrapLogger as IDisposable)?.Dispose();
+            _database=new HomeKtvDatabase(paths);
+            try{await _database.InitializeAsync();if(!await _database.QuickCheckAsync())throw new InvalidDataException("数据库完整性检查失败。");}
+            catch(Exception databaseException){_logger.Error(databaseException,"Portable database initialization or integrity check failed");if(await OfferDatabaseRecoveryAsync(paths,e.Args))return;throw new InvalidDataException("数据库无法打开或已损坏。可从 Data/Backups 恢复备份。",databaseException);}
             var songs=new SqliteSongRepository(_database);var queue=new SqliteQueueRepository(_database);var backups=new DatabaseBackupService(_database,paths);
             var recovered=await queue.RecoverInterruptedAsync();if(recovered>0)_logger.Warning("Recovered {Count} interrupted queue items to waiting state",recovered);
-            var inspector=new FfprobeMediaInspector(Path.Combine(paths.Ffmpeg,"ffprobe.exe"));var importer=new LocalMediaImporter(paths,_database,songs,inspector);
+            var inspector=new FfprobeMediaInspector(Path.Combine(paths.Ffmpeg,"ffprobe.exe"));var importer=new LocalMediaImporter(paths,_database,songs,inspector,loaded.Settings.MediaRoot);var mediaInspection=new MediaInspectionService(paths,_database,songs,inspector);var httpDownload=new HttpMediaDownloadService(paths);var transcode=new FfmpegTranscodeService(paths);
             string? demoPlaybackPath=null;
             if(e.Args.Contains("--import-demo",StringComparer.OrdinalIgnoreCase))
             {
@@ -63,7 +65,8 @@ public partial class App : System.Windows.Application
                 using var client=new HttpClient{BaseAddress=new Uri(_server.LocalAddress),Timeout=TimeSpan.FromSeconds(10)};
                 using var response=await client.GetAsync("health");response.EnsureSuccessStatusCode();_logger.Information("Mobile server health smoke completed at {Address}",_server.LocalAddress);Shutdown(0);return;
             }
-            var viewModel=new MainViewModel(paths,loaded.Settings,_database,songs,queue,importer,backups,settingsStore,_player,_server,_logger);
+            _automaticBackup=new AutomaticBackupCoordinator(backups,paths,loaded.Settings.AutomaticBackupHours,_logger);_automaticBackup.Start();
+            var viewModel=new MainViewModel(paths,loaded.Settings,_database,songs,queue,importer,httpDownload,transcode,mediaInspection,backups,settingsStore,_player,_server,_logger);
             var window=new MainWindow(viewModel);MainWindow=window;ShutdownMode=ShutdownMode.OnMainWindowClose;window.Show();
             if(e.Args.Contains("--smoke-ui",StringComparer.OrdinalIgnoreCase))
             {
@@ -86,7 +89,7 @@ public partial class App : System.Windows.Application
         try
         {
             _logger?.Information("HomeKTV shutdown started");var server=_server;var database=_database;
-            Task.Run(async()=>{if(server is not null)await server.DisposeAsync();if(database is not null)await database.DisposeAsync();}).GetAwaiter().GetResult();
+            var automaticBackup=_automaticBackup;Task.Run(async()=>{if(server is not null)await server.DisposeAsync();if(automaticBackup is not null)await automaticBackup.DisposeAsync();if(database is not null)await database.DisposeAsync();}).GetAwaiter().GetResult();
             _player?.Dispose();_logger?.Information("HomeKTV shutdown completed");
         }
         catch(Exception exception){_logger?.Error(exception,"Error while shutting down HomeKTV");}
@@ -101,5 +104,18 @@ public partial class App : System.Windows.Application
         try{_ownsInstance=_instanceMutex.WaitOne(0,false);}
         catch(AbandonedMutexException){_ownsInstance=true;}
         return _ownsInstance;
+    }
+
+    private async Task<bool> OfferDatabaseRecoveryAsync(PortablePaths paths,string[] arguments)
+    {
+        if(arguments.Any(x=>x is "--health-check" or "--smoke-ui" or "--server-smoke"))return false;
+        var backup=Directory.Exists(paths.Backups)?Directory.EnumerateFiles(paths.Backups,"HomeKTV-*.db").OrderByDescending(File.GetLastWriteTimeUtc).FirstOrDefault():null;
+        if(backup is null||!await DatabaseBackupService.IsValidDatabaseAsync(backup))return false;
+        var answer=MessageBox.Show($"检测到主数据库损坏。\n\n是否恢复最新备份？\n{Path.GetFileName(backup)}\n\n原损坏数据库会保留在 Data/Corrupt 中。","数据库恢复",MessageBoxButton.YesNo,MessageBoxImage.Warning);
+        if(answer!=MessageBoxResult.Yes)return false;
+        if(_database is not null){await _database.DisposeAsync();_database=null;}
+        var corruptDirectory=Path.Combine(paths.Data,"Corrupt");Directory.CreateDirectory(corruptDirectory);var stamp=DateTime.Now.ToString("yyyyMMdd-HHmmss-fff");
+        foreach(var suffix in new[]{string.Empty,"-wal","-shm"}){var source=paths.Database+suffix;if(File.Exists(source))File.Move(source,Path.Combine(corruptDirectory,$"HomeKTV-{stamp}.db{suffix}"),true);}
+        File.Copy(backup,paths.Database,true);MessageBox.Show("数据库已恢复。HomeKTV 将关闭，请重新打开。","恢复完成",MessageBoxButton.OK,MessageBoxImage.Information);Shutdown(0);return true;
     }
 }

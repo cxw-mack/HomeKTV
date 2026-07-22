@@ -20,7 +20,7 @@ public sealed class JsonSettingsStore(PortablePaths paths)
         try
         {
             await using var stream = File.OpenRead(paths.Settings);
-            return (await JsonSerializer.DeserializeAsync<HomeKtvSettings>(stream, Options, cancellationToken) ?? new HomeKtvSettings(), null);
+            return (HomeKtvSettingsValidator.Normalize(await JsonSerializer.DeserializeAsync<HomeKtvSettings>(stream, Options, cancellationToken) ?? new HomeKtvSettings()), null);
         }
         catch (Exception exception) when (exception is JsonException or IOException or UnauthorizedAccessException)
         {
@@ -34,6 +34,7 @@ public sealed class JsonSettingsStore(PortablePaths paths)
 
     public async Task SaveAsync(HomeKtvSettings settings, CancellationToken cancellationToken = default)
     {
+        HomeKtvSettingsValidator.Normalize(settings);
         paths.EnsureDirectories();
         var temporary = paths.Settings + ".tmp";
         await using (var stream = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.None, 81920, FileOptions.WriteThrough))
@@ -41,4 +42,3 @@ public sealed class JsonSettingsStore(PortablePaths paths)
         File.Move(temporary, paths.Settings, true);
     }
 }
-

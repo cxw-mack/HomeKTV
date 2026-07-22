@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Diagnostics;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -11,6 +12,7 @@ using HomeKTV.Core.Queue;
 using HomeKTV.Infrastructure.Configuration;
 using HomeKTV.Infrastructure.Data;
 using HomeKTV.Infrastructure.Media;
+using HomeKTV.Library;
 using HomeKTV.Player;
 using HomeKTV.Server;
 using Serilog;
@@ -20,14 +22,14 @@ namespace HomeKTV.App.ViewModels;
 public partial class MainViewModel : ObservableObject
 {
     private readonly PortablePaths _paths; private readonly HomeKtvDatabase _database; private readonly ISongRepository _songs; private readonly IQueueRepository _queue;
-    private readonly LocalMediaImporter _importer; private readonly DatabaseBackupService _backups; private readonly JsonSettingsStore _settingsStore; private readonly HomeKtvWebServer? _server; private readonly ILogger _logger;
+    private readonly LocalMediaImporter _importer; private readonly HttpMediaDownloadService _httpDownload; private readonly FfmpegTranscodeService _transcode; private readonly MediaInspectionService _mediaInspection; private readonly DatabaseBackupService _backups; private readonly JsonSettingsStore _settingsStore; private readonly HomeKtvWebServer? _server; private readonly ILogger _logger;
     private readonly SemaphoreSlim _advanceGate=new(1,1); private QueueItem? _currentItem;
 
-    public MainViewModel(PortablePaths paths,HomeKtvSettings settings,HomeKtvDatabase database,ISongRepository songs,IQueueRepository queue,LocalMediaImporter importer,DatabaseBackupService backups,JsonSettingsStore settingsStore,LibVlcPlaybackService? player,HomeKtvWebServer? server,ILogger logger)
+    public MainViewModel(PortablePaths paths,HomeKtvSettings settings,HomeKtvDatabase database,ISongRepository songs,IQueueRepository queue,LocalMediaImporter importer,HttpMediaDownloadService httpDownload,FfmpegTranscodeService transcode,MediaInspectionService mediaInspection,DatabaseBackupService backups,JsonSettingsStore settingsStore,LibVlcPlaybackService? player,HomeKtvWebServer? server,ILogger logger)
     {
-        _paths=paths;Settings=settings;_database=database;_songs=songs;_queue=queue;_importer=importer;_backups=backups;_settingsStore=settingsStore;Player=player;_server=server;_logger=logger;
-        ServerAddress=server?.LanAddress??"手机服务未启动";Volume=player?.Volume??80;
-        if(Player is not null){Player.PlaybackEnded+=(_,_)=>DispatchAdvance(null);Player.PlaybackFailed+=(_,message)=>DispatchAdvance(message);}
+        _paths=paths;Settings=settings;_database=database;_songs=songs;_queue=queue;_importer=importer;_httpDownload=httpDownload;_transcode=transcode;_mediaInspection=mediaInspection;_backups=backups;_settingsStore=settingsStore;Player=player;_server=server;_logger=logger;
+        ServerAddress=server?.LanAddress??"手机服务未启动";Volume=settings.DefaultVolume;
+        if(Player is not null){Player.PlaybackEnded+=(_,_)=>DispatchAdvance(null);Player.PlaybackFailed+=(_,message)=>DispatchAdvance(message);try{AudioOutputDevices=[string.Empty,..Player.GetAudioOutputDeviceIds()];if(!string.IsNullOrWhiteSpace(settings.DefaultAudioOutput)&&!Player.TrySetAudioOutputDevice(settings.DefaultAudioOutput))_logger.Warning("音频输出设备 {Device} 不存在，已回退到系统默认设备",settings.DefaultAudioOutput);}catch(Exception exception){_logger.Warning(exception,"无法枚举或应用音频输出设备 {Device}，已使用系统默认设备",settings.DefaultAudioOutput);}}
         if(server is not null)server.QueueChanged+=(_,_)=>_ = Application.Current.Dispatcher.InvokeAsync(()=>_ = HandleExternalQueueAsync());
     }
 
@@ -37,8 +39,13 @@ public partial class MainViewModel : ObservableObject
     public string ResolvePortablePath(string relativePath)=>_paths.Resolve(relativePath);
     public ObservableCollection<Song> Songs { get; }=[];
     public ObservableCollection<QueueItem> QueueItems { get; }=[];
+    public ObservableCollection<MediaInspectionReportItem> MediaInspectionResults { get; }=[];
     public IReadOnlyList<string> Languages { get; }=["全部","华语","粤语","英文","其他"];
-    public event EventHandler? ShowQrRequested; public event EventHandler? ImportRequested; public event EventHandler? RestoreRequested; public event EventHandler? OpenPlayerRequested;
+    public IReadOnlyList<AudioMode> AudioModes { get; }=Enum.GetValues<AudioMode>();
+    public IReadOnlyList<QueueOrderingMode> QueueModes { get; }=Enum.GetValues<QueueOrderingMode>();
+    public IReadOnlyList<string> LogLevels { get; }=["Debug","Information","Warning","Error"];
+    public IReadOnlyList<string> AudioOutputDevices { get; private set; }=[];
+    public event EventHandler? ShowQrRequested; public event EventHandler? ImportRequested; public event EventHandler? UrlImportRequested; public event EventHandler? TranscodeRequested; public event EventHandler? BatchImportRequested; public event EventHandler? ImportBoxRequested; public event EventHandler? RestoreRequested; public event EventHandler? OpenPlayerRequested; public event EventHandler? ClosePlayerRequested; public event EventHandler? CycleDisplayRequested;
 
     [ObservableProperty] private string searchText=string.Empty;
     [ObservableProperty] private string selectedLanguage="全部";
@@ -55,19 +62,23 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string serverAddress;
     [ObservableProperty] private int songCount;
     [ObservableProperty] private int availableSongCount;
+    [ObservableProperty] private SongBrowseMode songBrowseMode=SongBrowseMode.Popular;
+    [ObservableProperty] private string libraryViewTitle="热门歌曲";
+    [ObservableProperty] private string logText="点击“刷新日志”查看最近运行记录。";
 
-    partial void OnVolumeChanged(int value){if(Player is not null)Player.Volume=value;}
+    partial void OnVolumeChanged(int value){value=Math.Clamp(value,0,125);Settings.DefaultVolume=value;if(Player is not null)Player.Volume=value;}
 
     public async Task InitializeAsync()
     {
         await SearchAsync();await RefreshQueueAsync();await RefreshStatisticsAsync();
+        if(Settings.InspectMediaOnStartup)await InspectMediaAsync();
         if(QueueItems.Any(x=>x.State==QueueItemState.Waiting))await PlayNextAsync();
     }
 
     [RelayCommand]
     private async Task SearchAsync()
     {
-        try{var language=SelectedLanguage=="全部"?null:SelectedLanguage;var result=await _songs.SearchAsync(SearchText,language);Replace(Songs,result);StatusMessage=$"找到 {result.Count} 首歌曲";}
+        try{var language=SelectedLanguage=="全部"?null:SelectedLanguage;var result=string.IsNullOrWhiteSpace(SearchText)&&language is null?await _songs.BrowseAsync(SongBrowseMode):await _songs.SearchAsync(SearchText,language);Replace(Songs,result);StatusMessage=$"找到 {result.Count} 首歌曲";}
         catch(Exception e){Handle("搜索歌曲失败",e);}
     }
 
@@ -79,6 +90,12 @@ public partial class MainViewModel : ObservableObject
         catch(Exception e){Handle("点歌失败",e);}
     }
 
+    [RelayCommand] private async Task BrowsePopularAsync(){SongBrowseMode=SongBrowseMode.Popular;LibraryViewTitle="热门歌曲";SearchText=string.Empty;SelectedLanguage="全部";await SearchAsync();}
+    [RelayCommand] private async Task BrowseRecentImportedAsync(){SongBrowseMode=SongBrowseMode.RecentImported;LibraryViewTitle="最近导入";SearchText=string.Empty;SelectedLanguage="全部";await SearchAsync();}
+    [RelayCommand] private async Task BrowseRecentPlayedAsync(){SongBrowseMode=SongBrowseMode.RecentPlayed;LibraryViewTitle="最近播放";SearchText=string.Empty;SelectedLanguage="全部";await SearchAsync();}
+    [RelayCommand] private async Task BrowseFavoritesAsync(){SongBrowseMode=SongBrowseMode.Favorites;LibraryViewTitle="收藏歌曲";SearchText=string.Empty;SelectedLanguage="全部";await SearchAsync();}
+    [RelayCommand] private async Task ToggleFavoriteAsync(Song? song){if(song is null)return;try{song.IsFavorite=!song.IsFavorite;await _songs.SetFavoriteAsync(song.Id,song.IsFavorite,"desktop-admin");OnPropertyChanged(nameof(Songs));StatusMessage=song.IsFavorite?$"已收藏《{song.Title}》":$"已取消收藏《{song.Title}》";}catch(Exception e){song.IsFavorite=!song.IsFavorite;Handle("更新收藏失败",e);}}
+
     [RelayCommand]
     private async Task DeleteQueueAsync(QueueItem? item)
     {
@@ -86,6 +103,10 @@ public partial class MainViewModel : ObservableObject
         try{await _queue.RemoveAsync(item.Id,null,true);await RefreshQueueAsync();if(_server is not null)await _server.NotifyQueueChangedAsync();}
         catch(Exception e){Handle("删除队列歌曲失败",e);}
     }
+
+    [RelayCommand] private async Task TogglePinAsync(QueueItem? item){if(item is null)return;try{await _queue.SetPinnedAsync(item.Id,!item.IsPinned);await RefreshQueueAsync();if(_server is not null)await _server.NotifyQueueChangedAsync();}catch(Exception e){Handle("置顶操作失败",e);}}
+    [RelayCommand] private async Task MoveQueueUpAsync(QueueItem? item)=>await MoveQueueAsync(item,-1);
+    [RelayCommand] private async Task MoveQueueDownAsync(QueueItem? item)=>await MoveQueueAsync(item,1);
 
     [RelayCommand]
     private async Task ClearQueueAsync()
@@ -111,19 +132,19 @@ public partial class MainViewModel : ObservableObject
                 {
                     await _queue.SetStateAsync(candidate.Id,QueueItemState.Loading);var song=candidate.Song??await _songs.GetAsync(candidate.SongId)??throw new InvalidDataException("歌曲记录不存在。\n");
                     var path=_paths.Resolve(song.VideoRelativePath);if(!File.Exists(path))throw new FileNotFoundException("MV 文件缺失。",path);
-                    await Player.PlayAsync(path);_currentItem=candidate;candidate.Song=song;await _queue.SetStateAsync(candidate.Id,QueueItemState.Playing);
+                    await Player.PlayAsync(path);_currentItem=candidate;candidate.Song=song;ApplyDefaultAudioMode(song);await _queue.SetStateAsync(candidate.Id,QueueItemState.Playing);
                     CurrentTitle=song.Title;CurrentArtist=song.ArtistDisplayName;CurrentRequester=candidate.RequestedBy;CurrentLyricRelativePath=song.LyricRelativePath;CurrentLyricOffsetMs=song.LyricOffsetMs;IsPaused=false;
                     var next=ordered.FirstOrDefault(x=>x.Id!=candidate.Id&&x.State==QueueItemState.Waiting);NextTitle=next?.Song?.Title??"暂无下一首";
                     await RefreshQueueAsync();await BroadcastPlaybackAsync("Playing");StatusMessage=$"正在播放《{song.Title}》";
                 }
-                catch(Exception e){await _queue.SetStateAsync(candidate.Id,QueueItemState.Failed,e.Message);_logger.Error(e,"播放歌曲 {SongId} 失败",candidate.SongId);StatusMessage=$"{candidate.Song?.Title??"歌曲"} 播放失败，已自动跳过";}
+                catch(Exception e){await _queue.SetStateAsync(candidate.Id,QueueItemState.Failed,e.Message);await _songs.RecordPlaybackAsync(candidate.SongId,candidate.RequestedBy,"Failed");_logger.Error(e,"播放歌曲 {SongId} 失败",candidate.SongId);StatusMessage=$"{candidate.Song?.Title??"歌曲"} 播放失败，已自动跳过";}
             }
         }
         finally{_advanceGate.Release();}
     }
 
     [RelayCommand]
-    private async Task SkipAsync(){if(_currentItem is null)return;Player?.Stop();var item=_currentItem;_currentItem=null;await _queue.SetStateAsync(item.Id,QueueItemState.Skipped);await RefreshQueueAsync();await PlayNextAsync();}
+    private async Task SkipAsync(){if(_currentItem is null)return;Player?.Stop();var item=_currentItem;_currentItem=null;await _queue.SetStateAsync(item.Id,QueueItemState.Skipped);await _songs.RecordPlaybackAsync(item.SongId,item.RequestedBy,"Skipped");await RefreshQueueAsync();await PlayNextAsync();}
 
     [RelayCommand]
     private async Task TogglePauseAsync(){if(Player is null||_currentItem is null)return;if(Player.IsPlaying){Player.Pause();IsPaused=true;PauseButtonText="继续";await _queue.SetStateAsync(_currentItem.Id,QueueItemState.Paused);await BroadcastPlaybackAsync("Paused");}else{Player.Resume();IsPaused=false;PauseButtonText="暂停";await _queue.SetStateAsync(_currentItem.Id,QueueItemState.Playing);await BroadcastPlaybackAsync("Playing");}}
@@ -134,12 +155,18 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand] private void Stereo()=>Player?.SetAudioChannel(AudioChannelMode.Stereo);
     [RelayCommand] private void LeftChannel()=>Player?.SetAudioChannel(AudioChannelMode.Left);
     [RelayCommand] private void RightChannel()=>Player?.SetAudioChannel(AudioChannelMode.Right);
-    [RelayCommand] private void LyricsEarlier(){CurrentLyricOffsetMs-=100;_ = SaveLyricOffsetAsync();}
-    [RelayCommand] private void LyricsLater(){CurrentLyricOffsetMs+=100;_ = SaveLyricOffsetAsync();}
+    [RelayCommand] private void LyricsEarlier(){CurrentLyricOffsetMs+=100;_ = SaveLyricOffsetAsync();}
+    [RelayCommand] private void LyricsLater(){CurrentLyricOffsetMs-=100;_ = SaveLyricOffsetAsync();}
     [RelayCommand] private void ShowQr()=>ShowQrRequested?.Invoke(this,EventArgs.Empty);
     [RelayCommand] private void Import()=>ImportRequested?.Invoke(this,EventArgs.Empty);
+    [RelayCommand] private void UrlImport()=>UrlImportRequested?.Invoke(this,EventArgs.Empty);
+    [RelayCommand] private void Transcode()=>TranscodeRequested?.Invoke(this,EventArgs.Empty);
+    [RelayCommand] private void BatchImport()=>BatchImportRequested?.Invoke(this,EventArgs.Empty);
+    [RelayCommand] private void ScanImportBox()=>ImportBoxRequested?.Invoke(this,EventArgs.Empty);
     [RelayCommand] private void Restore()=>RestoreRequested?.Invoke(this,EventArgs.Empty);
     [RelayCommand] private void OpenPlayer()=>OpenPlayerRequested?.Invoke(this,EventArgs.Empty);
+    [RelayCommand] private void ClosePlayer()=>ClosePlayerRequested?.Invoke(this,EventArgs.Empty);
+    [RelayCommand] private void CycleDisplay()=>CycleDisplayRequested?.Invoke(this,EventArgs.Empty);
 
     public async Task ImportFileAsync(LocalImportRequest request)
     {
@@ -147,19 +174,60 @@ public partial class MainViewModel : ObservableObject
         catch(Exception e){Handle("导入歌曲失败",e);}
     }
 
-    public async Task RestoreDatabaseAsync(string path){try{await _backups.RestoreAsync(path);StatusMessage="数据库恢复完成，请重新启动 HomeKTV";}catch(Exception e){Handle("恢复数据库失败",e);}}
+    public async Task ImportUrlAsync(string url,string title,string artist,string language,IProgress<HttpDownloadProgress>? progress,CancellationToken cancellationToken)
+    {
+        string? temporary=null;
+        try
+        {
+            StatusMessage="正在下载直链媒体…";temporary=await _httpDownload.DownloadAsync(url,progress,cancellationToken);StatusMessage="下载完成，正在校验并导入…";
+            var result=await _importer.ImportAsync(new LocalImportRequest(temporary,title,artist,language),cancellationToken);StatusMessage=result.Message;await SearchAsync();await RefreshStatisticsAsync();
+        }
+        finally{if(temporary is not null)HttpMediaDownloadService.TryDelete(temporary);}
+    }
+
+    public async Task<string> TranscodeAsync(string path,bool keepOriginal,IProgress<TranscodeProgress>? progress,CancellationToken cancellationToken)
+    {
+        try{StatusMessage="正在使用 FFmpeg 转码…";var output=await _transcode.TranscodeToH264Async(path,keepOriginal,progress,cancellationToken);_logger.Information("FFmpeg transcoded {Input} to {Output}; keep original: {KeepOriginal}",path,output,keepOriginal);StatusMessage=$"转码完成：{Path.GetFileName(output)}";return output;}
+        catch(Exception exception) when(exception is not OperationCanceledException){Handle("FFmpeg 转码失败",exception);throw;}
+    }
+
+    public IReadOnlyList<MediaImportCandidate> ScanImportFolder(string directory,bool recursive=false)=>MediaFolderScanner.Scan(directory,recursive);
+    public IReadOnlyList<MediaImportCandidate> GetImportBoxCandidates()=>MediaFolderScanner.Scan(_paths.ImportBox);
+    public async Task ImportCandidatesAsync(IEnumerable<MediaImportCandidate> candidates,bool cleanupImportBox)
+    {
+        var selected=candidates.Where(x=>x.IsSelected).ToList();var imported=0;var duplicates=0;
+        foreach(var candidate in selected)
+        {
+            try
+            {
+                StatusMessage=$"正在导入 {imported+duplicates+1}/{selected.Count}：{candidate.Artist} - {candidate.Title}";
+                var categoryId=candidate.Language switch{"华语"=>1L,"粤语"=>2L,"英文"=>3L,_=>4L};var result=await _importer.ImportAsync(new LocalImportRequest(candidate.VideoPath,candidate.Title,candidate.Artist,candidate.Language,categoryId,LyricPath:candidate.LyricPath,CoverPath:candidate.CoverPath));
+                if(result.IsDuplicate)duplicates++;else if(result.Song is not null)imported++;
+                if(cleanupImportBox&&(result.IsDuplicate||result.Song is not null))CleanupImportBoxFiles(candidate);
+            }
+            catch(Exception exception){_logger.Error(exception,"批量导入 {Video} 失败",candidate.VideoPath);StatusMessage=$"{candidate.Title} 导入失败："+exception.Message;}
+        }
+        await SearchAsync();await RefreshStatisticsAsync();StatusMessage=$"批量导入完成：新增 {imported} 首，跳过重复 {duplicates} 首";
+    }
+
+    public async Task<bool> RestoreDatabaseAsync(string path){try{await _backups.RestoreAsync(path);StatusMessage="数据库恢复完成，请重新启动 HomeKTV";return true;}catch(Exception e){Handle("恢复数据库失败",e);return false;}}
     [RelayCommand] private async Task BackupAsync(){try{var path=await _backups.BackupAsync("管理员手动备份");StatusMessage=$"备份完成：{Path.GetFileName(path)}";}catch(Exception e){Handle("数据库备份失败",e);}}
     [RelayCommand] private async Task SaveSettingsAsync(){try{await _settingsStore.SaveAsync(Settings);StatusMessage="设置已保存，部分设置将在下次启动生效";}catch(Exception e){Handle("保存设置失败",e);}}
-    [RelayCommand] private async Task InspectMediaAsync(){try{var all=await _songs.SearchAsync(null,null,500);var missing=all.Count(x=>!File.Exists(_paths.Resolve(x.VideoRelativePath)));AvailableSongCount=all.Count-missing;StatusMessage=missing==0?"媒体检查通过，所有文件均可访问":$"发现 {missing} 个媒体文件缺失";}catch(Exception e){Handle("媒体检查失败",e);}}
+    [RelayCommand] private void RefreshLogs(){try{var file=Directory.EnumerateFiles(_paths.Logs,"HomeKTV-*.log").OrderByDescending(File.GetLastWriteTimeUtc).FirstOrDefault();LogText=file is null?"尚未生成日志。":string.Join(Environment.NewLine,File.ReadLines(file).TakeLast(300));}catch(Exception e){Handle("读取日志失败",e);}}
+    [RelayCommand] private void OpenLogsFolder(){try{Process.Start(new ProcessStartInfo{FileName=_paths.Logs,UseShellExecute=true});}catch(Exception e){Handle("打开日志目录失败",e);}}
+    [RelayCommand] private async Task InspectMediaAsync(){try{StatusMessage="正在使用 FFprobe 检查媒体…";var progress=new Progress<(int Current,int Total,string Title)>(x=>StatusMessage=$"正在检查 {x.Current}/{x.Total}：{x.Title}");var results=await _mediaInspection.InspectAllAsync(progress);Replace(MediaInspectionResults,results);SongCount=results.Count;AvailableSongCount=results.Count(x=>x.Availability is MediaAvailability.Healthy or MediaAvailability.NoLyrics);var problems=results.Count-AvailableSongCount;StatusMessage=problems==0?"媒体检查通过":$"媒体检查完成：{problems} 项需要处理";}catch(Exception e){Handle("媒体检查失败",e);}}
 
-    private async Task SaveLyricOffsetAsync(){if(_currentItem?.Song is not { } song)return;song.LyricOffsetMs=CurrentLyricOffsetMs;await _songs.UpsertAsync(song);StatusMessage=$"歌词偏移 {CurrentLyricOffsetMs:+#;-#;0} ms";}
+    private async Task SaveLyricOffsetAsync(){if(_currentItem?.Song is not { } song)return;song.LyricOffsetMs=CurrentLyricOffsetMs;await _songs.SetLyricOffsetAsync(song.Id,CurrentLyricOffsetMs);StatusMessage=$"歌词偏移 {CurrentLyricOffsetMs:+#;-#;0} ms";}
     private async Task RefreshQueueAsync(){var ordered=QueuePlanner.Order(await _queue.GetActiveAsync(),Settings.QueueOrderingMode);Replace(QueueItems,ordered);}
     private async Task HandleExternalQueueAsync(){await RefreshQueueAsync();if(_currentItem is null)await PlayNextAsync();}
+    private async Task MoveQueueAsync(QueueItem? item,int direction){if(item is null)return;try{await _queue.MoveAsync(item.Id,direction,null,true);await RefreshQueueAsync();if(_server is not null)await _server.NotifyQueueChangedAsync();}catch(Exception e){Handle("调整队列顺序失败",e);}}
     private async Task RefreshStatisticsAsync(){var all=await _songs.SearchAsync(null,null,500);SongCount=all.Count;AvailableSongCount=all.Count(x=>x.IsAvailable&&File.Exists(_paths.Resolve(x.VideoRelativePath)));}
     private async Task BroadcastPlaybackAsync(string state){if(_server is null)return;await _server.NotifyQueueChangedAsync();await _server.NotifyPlaybackChangedAsync(new PlaybackSnapshot(_currentItem?.Id,CurrentTitle,CurrentArtist,state,Player?.PositionMs??0,NextTitle));}
     private void DispatchAdvance(string? error)=>_ = Application.Current.Dispatcher.InvokeAsync(()=>_ = CompleteCurrentAsync(error));
-    private async Task CompleteCurrentAsync(string? error){if(_currentItem is null)return;var item=_currentItem;_currentItem=null;await _queue.SetStateAsync(item.Id,error is null?QueueItemState.Finished:QueueItemState.Failed,error);await RefreshQueueAsync();await PlayNextAsync();}
+    private async Task CompleteCurrentAsync(string? error){if(_currentItem is null)return;if(error is null&&Player?.IsPlaying==true)return;var item=_currentItem;_currentItem=null;await _queue.SetStateAsync(item.Id,error is null?QueueItemState.Finished:QueueItemState.Failed,error);await _songs.RecordPlaybackAsync(item.SongId,item.RequestedBy,error is null?"Finished":"Failed");await RefreshQueueAsync();await PlayNextAsync();}
     private void SetIdle(){CurrentTitle="等待点歌";CurrentArtist="从歌库或手机点一首歌吧";CurrentRequester="";NextTitle="暂无下一首";CurrentLyricRelativePath=null;_ = _server?.NotifyPlaybackChangedAsync(PlaybackSnapshot.Idle);}
     private void Handle(string message,Exception e){_logger.Error(e,message);StatusMessage=message+"："+e.Message;}
+    private void CleanupImportBoxFiles(MediaImportCandidate candidate){foreach(var path in new[]{candidate.VideoPath,candidate.LyricPath,candidate.CoverPath}.Where(x=>!string.IsNullOrWhiteSpace(x))){var full=Path.GetFullPath(path!);var prefix=_paths.ImportBox+Path.DirectorySeparatorChar;if(full.StartsWith(prefix,StringComparison.OrdinalIgnoreCase)&&File.Exists(full))try{File.Delete(full);}catch(IOException exception){_logger.Warning(exception,"无法清理导入箱文件 {Path}",full);}}}
+    private void ApplyDefaultAudioMode(Song song){var mode=song.DefaultAudioMode==AudioMode.Automatic?Settings.DefaultAudioMode:song.DefaultAudioMode;if(mode==AudioMode.Original&&song.OriginalAudioTrack is int original)Player?.SetAudioTrack(original);else if(mode==AudioMode.Accompaniment&&song.AccompanimentAudioTrack is int accompaniment)Player?.SetAudioTrack(accompaniment);}
     private static void Replace<T>(ObservableCollection<T> target,IEnumerable<T> source){target.Clear();foreach(var item in source)target.Add(item);}
 }

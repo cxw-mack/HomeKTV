@@ -2,13 +2,14 @@ using HomeKTV.Core.Abstractions;
 using HomeKTV.Core.Models;
 using HomeKTV.Core.Portable;
 using HomeKTV.Infrastructure.Data;
+using HomeKTV.Library;
 
 namespace HomeKTV.Infrastructure.Media;
 
 public sealed record LocalImportRequest(string VideoPath, string Title, string Artist, string Language = "其他", long? CategoryId = null, string? LyricPath = null, string? CoverPath = null, int? OriginalAudioTrack = null, int? AccompanimentAudioTrack = null);
 public sealed record ImportResult(Song? Song, bool IsDuplicate, string Message);
 
-public sealed class LocalMediaImporter(PortablePaths paths, HomeKtvDatabase database, ISongRepository songs, FfprobeMediaInspector inspector)
+public sealed class LocalMediaImporter(PortablePaths paths, HomeKtvDatabase database, ISongRepository songs, FfprobeMediaInspector inspector, string mediaRoot="Media")
 {
     private static readonly HashSet<string> VideoExtensions = new(StringComparer.OrdinalIgnoreCase) { ".mp4", ".mkv", ".avi", ".mov", ".m4v", ".webm" };
 
@@ -21,19 +22,21 @@ public sealed class LocalMediaImporter(PortablePaths paths, HomeKtvDatabase data
         if (await HashExistsAsync(hash, cancellationToken)) return new(null, true, "媒体内容已经导入，未创建重复歌曲。");
 
         var safeStem = SafeName($"{request.Artist} - {request.Title}");
-        var videoTarget = UniqueTarget(paths.Mv, safeStem, Path.GetExtension(request.VideoPath));
+        var videoTarget = UniqueTarget(MediaDirectory("MV"), safeStem, Path.GetExtension(request.VideoPath));
         string? lyricTarget = null; string? coverTarget = null;
         try
         {
             await CopyAtomicallyAsync(request.VideoPath, videoTarget, cancellationToken);
-            if (!string.IsNullOrWhiteSpace(request.LyricPath) && File.Exists(request.LyricPath)) { lyricTarget = UniqueTarget(paths.Lyrics, safeStem, ".lrc"); await CopyAtomicallyAsync(request.LyricPath, lyricTarget, cancellationToken); }
-            if (!string.IsNullOrWhiteSpace(request.CoverPath) && File.Exists(request.CoverPath)) { coverTarget = UniqueTarget(paths.Covers, safeStem, Path.GetExtension(request.CoverPath)); await CopyAtomicallyAsync(request.CoverPath, coverTarget, cancellationToken); }
+            if (!string.IsNullOrWhiteSpace(request.LyricPath) && File.Exists(request.LyricPath)) { lyricTarget = UniqueTarget(MediaDirectory("Lyrics"), safeStem, ".lrc"); await CopyAtomicallyAsync(request.LyricPath, lyricTarget, cancellationToken); }
+            if (!string.IsNullOrWhiteSpace(request.CoverPath) && File.Exists(request.CoverPath)) { coverTarget = UniqueTarget(MediaDirectory("Covers"), safeStem, Path.GetExtension(request.CoverPath)); await CopyAtomicallyAsync(request.CoverPath, coverTarget, cancellationToken); }
 
             MediaProbeResult? probe = null;
             if (inspector.IsAvailable) probe = await inspector.InspectAsync(videoTarget, cancellationToken);
+            var keys=PinyinSearchKeyGenerator.Generate(request.Title,request.Artist);
             var song = new Song
             {
                 Title=request.Title.Trim(), ArtistDisplayName=request.Artist.Trim(), Language=request.Language, CategoryId=request.CategoryId,
+                Pinyin=keys.FullPinyin,PinyinInitials=keys.Initials,
                 VideoRelativePath=paths.ToRelative(videoTarget), LyricRelativePath=lyricTarget is null?null:paths.ToRelative(lyricTarget), CoverRelativePath=coverTarget is null?null:paths.ToRelative(coverTarget),
                 FileHash=hash, FileSize=new FileInfo(videoTarget).Length, DurationMs=probe?.DurationMs??0, Width=probe?.Width??0, Height=probe?.Height??0,
                 OriginalAudioTrack=request.OriginalAudioTrack, AccompanimentAudioTrack=request.AccompanimentAudioTrack, IsAvailable=true
@@ -51,6 +54,8 @@ public sealed class LocalMediaImporter(PortablePaths paths, HomeKtvDatabase data
     {
         return await database.ReadAsync(async (connection,ct)=>{var command=connection.CreateCommand();command.CommandText="SELECT EXISTS(SELECT 1 FROM Songs WHERE FileHash=$hash);";command.Parameters.AddWithValue("$hash",hash);return Convert.ToInt32(await command.ExecuteScalarAsync(ct))==1;},cancellationToken);
     }
+
+    private string MediaDirectory(string child)=>paths.Resolve(mediaRoot.TrimEnd('/','\\')+"/"+child);
 
     private static async Task CopyAtomicallyAsync(string source, string target, CancellationToken cancellationToken)
     {

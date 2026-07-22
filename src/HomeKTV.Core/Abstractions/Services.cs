@@ -5,9 +5,13 @@ namespace HomeKTV.Core.Abstractions;
 public interface ISongRepository
 {
     Task<IReadOnlyList<Song>> SearchAsync(string? query, string? language = null, int limit = 100, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<Song>> BrowseAsync(SongBrowseMode mode,int limit=100,CancellationToken cancellationToken=default);
     Task<Song?> GetAsync(long id, CancellationToken cancellationToken = default);
     Task<long> UpsertAsync(Song song, CancellationToken cancellationToken = default);
     Task SetFavoriteAsync(long songId, bool isFavorite, string sessionId, CancellationToken cancellationToken = default);
+    Task<IReadOnlySet<long>> GetFavoriteSongIdsAsync(string sessionId,CancellationToken cancellationToken=default);
+    Task SetLyricOffsetAsync(long songId, int offsetMs, CancellationToken cancellationToken = default);
+    Task RecordPlaybackAsync(long songId, string? requestedBy, string result, CancellationToken cancellationToken = default);
 }
 
 public interface IQueueRepository

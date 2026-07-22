@@ -46,6 +46,18 @@ public sealed class SqliteSongRepository(HomeKtvDatabase database) : ISongReposi
         }, cancellationToken);
     }
 
+    public async Task<IReadOnlyList<Song>> BrowseAsync(SongBrowseMode mode,int limit=100,CancellationToken cancellationToken=default)
+    {
+        var all=await SearchAsync(null,null,5000,cancellationToken);IEnumerable<Song> ordered=mode switch
+        {
+            SongBrowseMode.RecentImported=>all.OrderByDescending(x=>x.CreatedAt),
+            SongBrowseMode.RecentPlayed=>all.Where(x=>x.LastPlayedAt is not null).OrderByDescending(x=>x.LastPlayedAt),
+            SongBrowseMode.Favorites=>all.Where(x=>x.IsFavorite).OrderByDescending(x=>x.UpdatedAt),
+            _=>all.OrderByDescending(x=>x.PlayCount).ThenByDescending(x=>x.IsFavorite).ThenByDescending(x=>x.UpdatedAt)
+        };
+        return ordered.Take(Math.Clamp(limit,1,500)).ToList();
+    }
+
     public Task<long> UpsertAsync(Song song, CancellationToken cancellationToken = default)
     {
         ValidateRelative(song.VideoRelativePath, nameof(song.VideoRelativePath), required: true);
@@ -81,6 +93,15 @@ public sealed class SqliteSongRepository(HomeKtvDatabase database) : ISongReposi
             await command.ExecuteNonQueryAsync(ct);
             return 0;
         }, cancellationToken);
+
+    public Task<IReadOnlySet<long>> GetFavoriteSongIdsAsync(string sessionId,CancellationToken cancellationToken=default)=>
+        database.ReadAsync<IReadOnlySet<long>>(async (connection,ct)=>{var command=connection.CreateCommand();command.CommandText="SELECT SongId FROM Favorites WHERE GuestSessionId=$session;";command.Parameters.AddWithValue("$session",sessionId);await using var reader=await command.ExecuteReaderAsync(ct);var result=new HashSet<long>();while(await reader.ReadAsync(ct))result.Add(reader.GetInt64(0));return result;},cancellationToken);
+
+    public Task SetLyricOffsetAsync(long songId,int offsetMs,CancellationToken cancellationToken=default)=>
+        database.WriteAsync(async (connection,transaction,ct)=>{var command=connection.CreateCommand();command.Transaction=transaction;command.CommandText="UPDATE Songs SET LyricOffsetMs=$offset,UpdatedAt=$now WHERE Id=$id;";command.Parameters.AddWithValue("$offset",Math.Clamp(offsetMs,-60000,60000));command.Parameters.AddWithValue("$now",DateTimeOffset.UtcNow.ToString("O"));command.Parameters.AddWithValue("$id",songId);if(await command.ExecuteNonQueryAsync(ct)==0)throw new KeyNotFoundException("歌曲记录不存在。");return 0;},cancellationToken);
+
+    public Task RecordPlaybackAsync(long songId,string? requestedBy,string result,CancellationToken cancellationToken=default)=>
+        database.WriteAsync(async (connection,transaction,ct)=>{var now=DateTimeOffset.UtcNow.ToString("O");var command=connection.CreateCommand();command.Transaction=transaction;command.CommandText="UPDATE Songs SET PlayCount=PlayCount+1,LastPlayedAt=$now,UpdatedAt=$now WHERE Id=$song; INSERT INTO PlayHistory(SongId,RequestedBy,PlayedAt,Result) VALUES($song,$requested,$now,$result);";command.Parameters.AddWithValue("$song",songId);command.Parameters.AddWithValue("$requested",(object?)requestedBy??DBNull.Value);command.Parameters.AddWithValue("$now",now);command.Parameters.AddWithValue("$result",result);await command.ExecuteNonQueryAsync(ct);return 0;},cancellationToken);
 
     private void ValidateRelative(string? value, string parameterName, bool required = false)
     {

@@ -8,6 +8,7 @@ public sealed class HomeKtvSettings
     public int PlaybackDisplayIndex { get; set; } = 1;
     public bool PlaybackFullscreen { get; set; } = true;
     public string DefaultAudioOutput { get; set; } = string.Empty;
+    public int DefaultVolume { get; set; } = 80;
     public AudioMode DefaultAudioMode { get; set; } = AudioMode.Automatic;
     public QueueOrderingMode QueueOrderingMode { get; set; } = QueueOrderingMode.FairRotation;
     public bool MobileOrderingEnabled { get; set; } = true;
@@ -21,4 +22,3 @@ public sealed class HomeKtvSettings
     public bool ScanImportBoxOnStartup { get; set; } = true;
     public bool InspectMediaOnStartup { get; set; }
 }
-

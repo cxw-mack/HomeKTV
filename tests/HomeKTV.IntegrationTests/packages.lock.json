@@ -140,7 +140,8 @@
       "homektv.library": {
         "type": "Project",
         "dependencies": {
-          "HomeKTV.Core": "[1.0.0, )"
+          "HomeKTV.Core": "[1.0.0, )",
+          "ToolGood.Words.Pinyin": "[3.1.0.4, )"
         }
       },
       "homektv.server": {
@@ -181,6 +182,12 @@
         "requested": "[3.53.3, )",
         "resolved": "3.53.3",
         "contentHash": "ZXiSbBkrlw2Of/dBqny/qtQol7dlThrUD8zH/jkQicCFm2yn2BbhKsQW0+YHAzhANWz4ZJCz7gvo88BwluVhkA=="
+      },
+      "ToolGood.Words.Pinyin": {
+        "type": "CentralTransitive",
+        "requested": "[3.1.0.4, )",
+        "resolved": "3.1.0.4",
+        "contentHash": "QG51dprs+F9FWNoqCAgyBC/IV+sLFv7sNgQvAu7kbLp4IClnPdHTiX/K+4xo+Ippv6szabixTEBfFkvKSLs5Mw=="
       }
     }
   }

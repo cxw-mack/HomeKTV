@@ -8,22 +8,24 @@ const session=ref<Session|null>(null), nickname=ref(localStorage.getItem('homekt
 const query=ref(''), language=ref(''), songs=ref<Song[]>([]), queue=ref<QueueItem[]>([])
 const playback=ref<Playback>({title:null,artist:null,state:'Idle',nextTitle:null}), tab=ref<Tab>('songs')
 const busy=ref(false), message=ref(''), online=ref(navigator.onLine)
-let connection:signalR.HubConnection|null=null, searchTimer=0
+let connection:signalR.HubConnection|null=null, searchTimer=0, reconnectTimer=0
 const myQueue=computed(()=>queue.value.filter(x=>x.isMine))
 
 async function enter(){if(!nickname.value.trim())return;busy.value=true;try{session.value=await api.createSession(nickname.value.trim());localStorage.setItem('homektv-nickname',nickname.value.trim());await load();await connect()}catch(e){notice(e)}finally{busy.value=false}}
 async function load(){await loadState();await search()}
 async function loadState(){if(!session.value)return;const state=await api.state(session.value);queue.value=state.queue;playback.value=state.playback}
-async function search(){busy.value=true;try{songs.value=await api.search(query.value,language.value)}catch(e){notice(e)}finally{busy.value=false}}
+async function search(){if(!session.value)return;busy.value=true;try{songs.value=await api.search(query.value,language.value,session.value)}catch(e){notice(e)}finally{busy.value=false}}
 async function order(song:Song){if(!session.value)return;try{await api.enqueue(song.id,session.value);message.value='已点《'+song.title+'》';setTimeout(()=>message.value='',1800)}catch(e){notice(e)}}
 async function remove(item:QueueItem){if(!session.value||!confirm('删除《'+item.song.title+'》？'))return;try{await api.remove(item.id,session.value);queue.value=queue.value.filter(x=>x.id!==item.id)}catch(e){notice(e)}}
 async function move(item:QueueItem,direction:-1|1){if(!session.value)return;try{await api.move(item.id,direction,session.value);await loadState()}catch(e){notice(e)}}
 async function favorite(song:Song){if(!session.value)return;try{song.isFavorite=!song.isFavorite;await api.favorite(song.id,song.isFavorite,session.value)}catch(e){song.isFavorite=!song.isFavorite;notice(e)}}
 function notice(error:unknown){message.value=error instanceof Error?error.message:'操作失败，请稍后重试';setTimeout(()=>message.value='',2800)}
-async function connect(){if(connection)return;connection=new signalR.HubConnectionBuilder().withUrl('/hub').withAutomaticReconnect([0,1000,3000,5000]).build();connection.on('queueChanged',()=>void loadState());connection.on('playbackChanged',(state:Playback)=>playback.value=state);connection.onreconnecting(()=>online.value=false);connection.onreconnected(()=>{online.value=true;void load()});try{await connection.start();online.value=true}catch{online.value=false}}
+function scheduleReconnect(){clearTimeout(reconnectTimer);reconnectTimer=window.setTimeout(()=>void connect(),3000)}
+async function connect(){if(!connection){connection=new signalR.HubConnectionBuilder().withUrl('/hub').withAutomaticReconnect([0,1000,3000,5000]).build();connection.on('queueChanged',()=>void loadState());connection.on('playbackChanged',(state:Playback)=>playback.value=state);connection.onreconnecting(()=>online.value=false);connection.onreconnected(()=>{online.value=true;void load()});connection.onclose(()=>{online.value=false;scheduleReconnect()})}if(connection.state!==signalR.HubConnectionState.Disconnected)return;try{await connection.start();online.value=true;clearTimeout(reconnectTimer)}catch{online.value=false;scheduleReconnect()}}
 watch([query,language],()=>{clearTimeout(searchTimer);searchTimer=window.setTimeout(()=>void search(),250)})
-onMounted(()=>{window.addEventListener('online',()=>online.value=true);window.addEventListener('offline',()=>online.value=false)})
-onBeforeUnmount(()=>{void connection?.stop()})
+const onOnline=()=>{online.value=true;void connect()}, onOffline=()=>online.value=false
+onMounted(()=>{window.addEventListener('online',onOnline);window.addEventListener('offline',onOffline)})
+onBeforeUnmount(()=>{clearTimeout(reconnectTimer);window.removeEventListener('online',onOnline);window.removeEventListener('offline',onOffline);void connection?.stop()})
 </script>
 
 <template>

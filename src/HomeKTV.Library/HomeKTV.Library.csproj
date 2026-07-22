@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+  <ItemGroup><PackageReference Include="ToolGood.Words.Pinyin" /></ItemGroup>
   <ItemGroup><ProjectReference Include="..\HomeKTV.Core\HomeKTV.Core.csproj" /></ItemGroup>
 
 </Project>

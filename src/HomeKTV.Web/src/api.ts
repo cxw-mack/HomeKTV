@@ -16,7 +16,7 @@ async function request<T>(url:string, init?:RequestInit, session?:Session|null):
 
 export const api={
   createSession:(nickname:string)=>request<Session>('/api/session',{method:'POST',body:JSON.stringify({nickname})}),
-  search:(query:string,language='')=>request<Song[]>('/api/songs?q='+encodeURIComponent(query)+'&language='+encodeURIComponent(language)),
+  search:(query:string,language:string,session:Session)=>request<Song[]>('/api/songs?q='+encodeURIComponent(query)+'&language='+encodeURIComponent(language),undefined,session),
   state:(session:Session)=>request<{playback:Playback;queue:QueueItem[]}>('/api/state',undefined,session),
   enqueue:(songId:number,session:Session)=>request<QueueItem>('/api/queue',{method:'POST',body:JSON.stringify({songId})},session),
   remove:(id:number,session:Session)=>request<void>('/api/queue/'+id,{method:'DELETE'},session),

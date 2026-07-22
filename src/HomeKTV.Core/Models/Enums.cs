@@ -5,4 +5,4 @@ public enum QueueItemState { Waiting, Loading, Playing, Paused, Finished, Skippe
 public enum AudioMode { Original, Accompaniment, Automatic }
 public enum AudioChannelMode { Stereo, Left, Right }
 public enum MediaAvailability { Healthy, Missing, Unreadable, NoAudio, NoLyrics, Duplicate }
-
+public enum SongBrowseMode { Popular, RecentImported, RecentPlayed, Favorites }

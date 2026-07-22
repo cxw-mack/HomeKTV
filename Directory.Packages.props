@@ -9,6 +9,7 @@
     <PackageVersion Include="LibVLCSharp.WPF" Version="3.10.0" />
     <PackageVersion Include="VideoLAN.LibVLC.Windows" Version="3.0.23.1" />
     <PackageVersion Include="QRCoder" Version="1.8.0" />
+    <PackageVersion Include="ToolGood.Words.Pinyin" Version="3.1.0.4" />
     <PackageVersion Include="Serilog" Version="4.4.0" />
     <PackageVersion Include="Serilog.Sinks.File" Version="7.0.0" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />

@@ -8,12 +8,21 @@ if($missing.Count){throw "便携包缺少：$($missing -join ', ')"}
 if((Get-ChildItem -LiteralPath (Join-Path $portable 'Runtime/LibVLC/plugins') -Recurse -Filter '*.dll').Count -lt 20){throw 'LibVLC 插件目录不完整。'}
 & (Join-Path $portable 'Runtime/FFmpeg/ffprobe.exe') -version|Select-Object -First 1;if($LASTEXITCODE -ne 0){throw 'FFprobe 不能运行。'}
 $settings=Get-Content -LiteralPath (Join-Path $portable 'Data/Settings.json') -Raw;if($settings -match '(?i)[A-Z]:\\'){throw 'Settings.json 包含硬编码绝对盘符。'}
+$unexpected=Get-ChildItem -LiteralPath $portable -Directory -Recurse|Where-Object {$_.Name -in @('node_modules','obj','bin','tests','TestResults')};if($unexpected){throw "便携包包含开发目录：$($unexpected.FullName -join ', ')"}
+$textFiles=Get-ChildItem -LiteralPath $portable -File -Recurse|Where-Object {$_.Extension -in @('.json','.txt','.bat','.ps1','.html','.js','.css','.md')};if($textFiles|Select-String -SimpleMatch $repoRoot -Quiet){throw '便携包文本资源泄漏了开发目录路径。'}
 $verifyRoot=Join-Path ([IO.Path]::GetTempPath()) ('HomeKTV-Portable-Verify-'+[Guid]::NewGuid().ToString('N'));$resolvedVerify=[IO.Path]::GetFullPath($verifyRoot);if(-not $resolvedVerify.StartsWith([IO.Path]::GetTempPath(),[StringComparison]::OrdinalIgnoreCase)){throw '临时验证路径不安全。'}
+function Invoke-Smoke([string]$Executable,[string[]]$Arguments,[int]$TimeoutMs,[string]$Description){$process=Start-Process -FilePath $Executable -ArgumentList $Arguments -WorkingDirectory (Split-Path $Executable -Parent) -WindowStyle Hidden -PassThru;if(-not $process.WaitForExit($TimeoutMs)){Stop-Process -Id $process.Id -Force;throw "$Description 超时。"};if($process.ExitCode -ne 0){throw "$Description 失败：$($process.ExitCode)"};$process.Dispose()}
 try{
     New-Item -ItemType Directory -Path $resolvedVerify|Out-Null
     Copy-Item -LiteralPath $portable -Destination $resolvedVerify -Recurse
-    $copy=Join-Path $resolvedVerify (Split-Path $portable -Leaf);$process=Start-Process -FilePath (Join-Path $copy 'HomeKTV.exe') -ArgumentList '--health-check' -WorkingDirectory $copy -WindowStyle Hidden -PassThru;if(-not $process.WaitForExit(30000)){Stop-Process -Id $process.Id -Force;throw '复制路径健康检查超时。'};if($process.ExitCode -ne 0){throw "复制路径健康检查失败：$($process.ExitCode)"}
-    $server=Start-Process -FilePath (Join-Path $copy 'HomeKTV.exe') -ArgumentList '--server-smoke' -WorkingDirectory $copy -WindowStyle Hidden -PassThru;if(-not $server.WaitForExit(30000)){Stop-Process -Id $server.Id -Force;throw '手机服务健康检查超时。'};if($server.ExitCode -ne 0){throw "手机服务健康检查失败：$($server.ExitCode)"}
-    $ui=Start-Process -FilePath (Join-Path $copy 'HomeKTV.exe') -ArgumentList '--smoke-ui' -WorkingDirectory $copy -WindowStyle Hidden -PassThru;if(-not $ui.WaitForExit(90000)){Stop-Process -Id $ui.Id -Force;throw 'WPF/LibVLC/服务器启动与安全退出烟测超时。'};if($ui.ExitCode -ne 0){throw "WPF 启动烟测失败：$($ui.ExitCode)"}
+    $copy=Join-Path $resolvedVerify (Split-Path $portable -Leaf);$exe=Join-Path $copy 'HomeKTV.exe';Invoke-Smoke $exe @('--health-check') 30000 '复制路径健康检查'
+
+    $configured=Get-Content -LiteralPath (Join-Path $copy 'Data/Settings.json') -Raw|ConvertFrom-Json;$listener=$null;try{$listener=[Net.Sockets.TcpListener]::new([Net.IPAddress]::Any,[int]$configured.ServerPort);$listener.Start()}catch [Net.Sockets.SocketException]{}try{Invoke-Smoke $exe @('--server-smoke') 30000 '端口冲突回退与手机服务健康检查'}finally{if($listener){$listener.Stop()}}
+
+    $settingsPath=Join-Path $copy 'Data/Settings.json';$settingsBackup=$settingsPath+'.verify-backup';Move-Item -LiteralPath $settingsPath -Destination $settingsBackup;Set-Content -LiteralPath $settingsPath -Value '{broken' -Encoding UTF8;Invoke-Smoke $exe @('--health-check') 30000 '损坏配置恢复检查';Remove-Item -LiteralPath $settingsPath -Force;Get-ChildItem -LiteralPath (Join-Path $copy 'Data') -Filter 'Settings.corrupt-*.json'|Remove-Item -Force;Move-Item -LiteralPath $settingsBackup -Destination $settingsPath
+
+    $databasePath=Join-Path $copy 'Data/HomeKTV.db';$databaseBackup=$databasePath+'.verify-backup';Move-Item -LiteralPath $databasePath -Destination $databaseBackup;Invoke-Smoke $exe @('--health-check') 30000 '首次无数据库初始化检查';foreach($suffix in @('','-wal','-shm')){$candidate=$databasePath+$suffix;if(Test-Path -LiteralPath $candidate){Remove-Item -LiteralPath $candidate -Force}};Move-Item -LiteralPath $databaseBackup -Destination $databasePath
+
+    $ffmpegPath=Join-Path $copy 'Runtime/FFmpeg';$ffmpegBackup=Join-Path $copy 'Runtime/FFmpeg.verify-backup';Move-Item -LiteralPath $ffmpegPath -Destination $ffmpegBackup;try{Invoke-Smoke $exe @('--smoke-ui') 90000 '缺少 FFmpeg 时的 WPF/LibVLC 降级启动检查'}finally{if(Test-Path -LiteralPath $ffmpegPath){Remove-Item -LiteralPath $ffmpegPath -Recurse -Force};Move-Item -LiteralPath $ffmpegBackup -Destination $ffmpegPath}
 }finally{if(Test-Path -LiteralPath $resolvedVerify){Remove-Item -LiteralPath $resolvedVerify -Recurse -Force}}
-Write-Host '[HomeKTV] PASS：目录、LibVLC、FFmpeg、Web、相对配置和复制路径健康检查全部通过。' -ForegroundColor Green
+Write-Host '[HomeKTV] PASS：目录/依赖/Web/相对路径/端口冲突/配置恢复/首次建库/FFmpeg 降级启动全部通过。' -ForegroundColor Green
