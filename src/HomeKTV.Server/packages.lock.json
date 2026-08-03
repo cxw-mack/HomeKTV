@@ -40,6 +40,7 @@
         "dependencies": {
           "HomeKTV.Core": "[1.0.0, )",
           "HomeKTV.Library": "[1.0.0, )",
+          "HomeKTV.Lyrics": "[1.0.0, )",
           "Microsoft.Data.Sqlite": "[10.0.10, )",
           "SQLitePCLRaw.lib.e_sqlite3": "[3.53.3, )",
           "Serilog": "[4.4.0, )",
@@ -51,6 +52,12 @@
         "dependencies": {
           "HomeKTV.Core": "[1.0.0, )",
           "ToolGood.Words.Pinyin": "[3.1.0.4, )"
+        }
+      },
+      "homektv.lyrics": {
+        "type": "Project",
+        "dependencies": {
+          "HomeKTV.Core": "[1.0.0, )"
         }
       },
       "Microsoft.Data.Sqlite": {

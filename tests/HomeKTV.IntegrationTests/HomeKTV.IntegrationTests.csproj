@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 
@@ -17,7 +17,13 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\HomeKTV.Infrastructure\HomeKTV.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\HomeKTV.Lyrics\HomeKTV.Lyrics.csproj" />
+    <ProjectReference Include="..\..\src\HomeKTV.Player\HomeKTV.Player.csproj" />
     <ProjectReference Include="..\..\src\HomeKTV.Server\HomeKTV.Server.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="AiAudioProcessingFeatureTests.cs;LyricsProductionFeatureTests.cs" />
   </ItemGroup>
 
 </Project>

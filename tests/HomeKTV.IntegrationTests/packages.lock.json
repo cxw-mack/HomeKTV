@@ -1,7 +1,7 @@
 {
   "version": 2,
   "dependencies": {
-    "net10.0": {
+    "net10.0-windows7.0": {
       "coverlet.collector": {
         "type": "Direct",
         "requested": "[10.0.1, )",
@@ -35,6 +35,11 @@
         "resolved": "3.1.5",
         "contentHash": "tKi7dSTwP4m5m9eXPM2Ime4Kn7xNf4x4zT9sdLO/G4hZVnQCRiMTWoSZqI/pYTVeI27oPPqHBKYI/DjJ9GsYgA=="
       },
+      "LibVLCSharp": {
+        "type": "Transitive",
+        "resolved": "3.10.0",
+        "contentHash": "VHuOfq8Xtb/lNz0asvCm5qDjgTmfB3m3lC40Dz9iH9oL3DM0fSXHjZaLxdtYVr5nsldJoh5BTeG8MtODprhC9Q=="
+      },
       "Microsoft.CodeCoverage": {
         "type": "Transitive",
         "resolved": "18.8.1",
@@ -59,6 +64,51 @@
         "contentHash": "FaQHPDTUOcE+SFTjssNPfrub2lT9Zyon4J2W/KLHt/efLJACb1TCeWXyOgh0D/4Q1e4n+S3E6mOKud+9nLZlEA==",
         "dependencies": {
           "Microsoft.TestPlatform.ObjectModel": "18.8.1"
+        }
+      },
+      "NAudio.Asio": {
+        "type": "Transitive",
+        "resolved": "2.2.1",
+        "contentHash": "hQglyOT5iT3XuGpBP8ZG0+aoqwRfidHjTNehpoWwX0g6KJEgtH2VaqM2nuJ2mheKZa/IBqB4YQTZVvrIapzfOA==",
+        "dependencies": {
+          "NAudio.Core": "2.2.1"
+        }
+      },
+      "NAudio.Core": {
+        "type": "Transitive",
+        "resolved": "2.2.1",
+        "contentHash": "GgkdP6K/7FqXFo7uHvoqGZTJvW4z8g2IffhOO4JHaLzKCdDOUEzVKtveoZkCuUX8eV2HAINqi7VFqlFndrnz/g=="
+      },
+      "NAudio.Midi": {
+        "type": "Transitive",
+        "resolved": "2.2.1",
+        "contentHash": "6r23ylGo5aeP02WFXsPquz0T0hFJWyh+7t++tz19tc3Kr38NHm+Z9j+FiAv+xkH8tZqXJqus9Q8p6u7bidIgbw==",
+        "dependencies": {
+          "NAudio.Core": "2.2.1"
+        }
+      },
+      "NAudio.Wasapi": {
+        "type": "Transitive",
+        "resolved": "2.2.1",
+        "contentHash": "lFfXoqacZZe0WqNChJgGYI+XV/n/61LzPHT3C1CJp4khoxeo2sziyX5wzNYWeCMNbsWxFvT3b3iXeY1UYjBhZw==",
+        "dependencies": {
+          "NAudio.Core": "2.2.1"
+        }
+      },
+      "NAudio.WinForms": {
+        "type": "Transitive",
+        "resolved": "2.2.1",
+        "contentHash": "DlDkewY1myY0A+3NrYRJD+MZhZV0yy1mNF6dckB27IQ9XCs/My5Ip8BZcoSHOsaPSe2GAjvoaDnk6N9w8xTv7w==",
+        "dependencies": {
+          "NAudio.WinMM": "2.2.1"
+        }
+      },
+      "NAudio.WinMM": {
+        "type": "Transitive",
+        "resolved": "2.2.1",
+        "contentHash": "xFHRFwH4x6aq3IxRbewvO33ugJRvZFEOfO62i7uQJRUNW2cnu6BeBTHUS0JD5KBucZbHZaYqxQG8dwZ47ezQuQ==",
+        "dependencies": {
+          "NAudio.Core": "2.2.1"
         }
       },
       "SQLitePCLRaw.bundle_e_sqlite3": {
@@ -131,6 +181,7 @@
         "dependencies": {
           "HomeKTV.Core": "[1.0.0, )",
           "HomeKTV.Library": "[1.0.0, )",
+          "HomeKTV.Lyrics": "[1.0.0, )",
           "Microsoft.Data.Sqlite": "[10.0.10, )",
           "SQLitePCLRaw.lib.e_sqlite3": "[3.53.3, )",
           "Serilog": "[4.4.0, )",
@@ -144,11 +195,35 @@
           "ToolGood.Words.Pinyin": "[3.1.0.4, )"
         }
       },
+      "homektv.lyrics": {
+        "type": "Project",
+        "dependencies": {
+          "HomeKTV.Core": "[1.0.0, )"
+        }
+      },
+      "homektv.player": {
+        "type": "Project",
+        "dependencies": {
+          "HomeKTV.Core": "[1.0.0, )",
+          "LibVLCSharp.WPF": "[3.10.0, )",
+          "NAudio": "[2.2.1, )",
+          "VideoLAN.LibVLC.Windows": "[3.0.23.1, )"
+        }
+      },
       "homektv.server": {
         "type": "Project",
         "dependencies": {
           "HomeKTV.Core": "[1.0.0, )",
           "HomeKTV.Infrastructure": "[1.0.0, )"
+        }
+      },
+      "LibVLCSharp.WPF": {
+        "type": "CentralTransitive",
+        "requested": "[3.10.0, )",
+        "resolved": "3.10.0",
+        "contentHash": "W7MFdY0QZBhATS3ZIMZSY1UYV6MqDxb+GibNzT3AzKNzDQX2Kzf27OZA5B0gA7fa2FYq79P7Jvlvdbbygis63g==",
+        "dependencies": {
+          "LibVLCSharp": "3.10.0"
         }
       },
       "Microsoft.Data.Sqlite": {
@@ -160,6 +235,20 @@
           "Microsoft.Data.Sqlite.Core": "10.0.10",
           "SQLitePCLRaw.bundle_e_sqlite3": "2.1.11",
           "SQLitePCLRaw.core": "2.1.11"
+        }
+      },
+      "NAudio": {
+        "type": "CentralTransitive",
+        "requested": "[2.2.1, )",
+        "resolved": "2.2.1",
+        "contentHash": "c0DzwiyyklM0TP39Y7RObwO3QkWecgM6H60ikiEnsV/aEAJPbj5MFCLaD8BSfKuZe0HGuh9GRGWWlJmSxDc9MA==",
+        "dependencies": {
+          "NAudio.Asio": "2.2.1",
+          "NAudio.Core": "2.2.1",
+          "NAudio.Midi": "2.2.1",
+          "NAudio.Wasapi": "2.2.1",
+          "NAudio.WinForms": "2.2.1",
+          "NAudio.WinMM": "2.2.1"
         }
       },
       "Serilog": {
@@ -188,6 +277,12 @@
         "requested": "[3.1.0.4, )",
         "resolved": "3.1.0.4",
         "contentHash": "QG51dprs+F9FWNoqCAgyBC/IV+sLFv7sNgQvAu7kbLp4IClnPdHTiX/K+4xo+Ippv6szabixTEBfFkvKSLs5Mw=="
+      },
+      "VideoLAN.LibVLC.Windows": {
+        "type": "CentralTransitive",
+        "requested": "[3.0.23.1, )",
+        "resolved": "3.0.23.1",
+        "contentHash": "yTGNrzj+Q/t72VNKK0d64jZ+8BGu5Vcp2nxpZ2ll350LkRWKSwqShGpZWcVxXVP8TiMbeGML09+Jzz3hNsIcqA=="
       }
     }
   }

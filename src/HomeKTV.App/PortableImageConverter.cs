@@ -15,7 +15,7 @@ public sealed class PortableImageConverter : IValueConverter
         try
         {
             var path=PortablePaths.FromBaseDirectory().Resolve(relative);if(!File.Exists(path))return DependencyProperty.UnsetValue;
-            var image=new BitmapImage();using var stream=File.OpenRead(path);image.BeginInit();image.CacheOption=BitmapCacheOption.OnLoad;image.DecodePixelWidth=128;image.StreamSource=stream;image.EndInit();image.Freeze();return image;
+            var image=new BitmapImage();using var stream=File.OpenRead(path);image.BeginInit();image.CacheOption=BitmapCacheOption.OnLoad;image.DecodePixelWidth=1920;image.StreamSource=stream;image.EndInit();image.Freeze();return image;
         }
         catch(Exception){return DependencyProperty.UnsetValue;}
     }

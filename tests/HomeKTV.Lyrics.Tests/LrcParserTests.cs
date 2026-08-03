@@ -38,5 +38,20 @@ public sealed class LrcParserTests
         Assert.Null(position.Current);
         Assert.Equal(-1, position.Index);
     }
-}
 
+    [Fact]
+    public void TimedCreditsAndVideoPromotionAreNotDisplayedAsLyrics()
+    {
+        var document=LrcParser.Parse("[00:01]詞曲 李宗盛\n[00:02]第一句\n[00:03]请不吝点赞 订阅 转发 打赏支持");Assert.Equal("第一句",Assert.Single(document.Lines).Text);
+    }
+
+    [Fact]
+    public void KaraokeFrameAlternatesRowsAndCalculatesProgress()
+    {
+        var document=LrcParser.Parse("[00:01]第一句\n[00:03]第二句\n[00:05]第三句");
+        var first=document.CreateKaraokeFrame(TimeSpan.FromSeconds(2));
+        Assert.Equal("第一句",first.TopText);Assert.Equal("第二句",first.BottomText);Assert.Equal(0,first.ActiveRow);Assert.Equal(.5,first.Progress,3);
+        var second=document.CreateKaraokeFrame(TimeSpan.FromSeconds(4));
+        Assert.Equal("第三句",second.TopText);Assert.Equal("第二句",second.BottomText);Assert.Equal(1,second.ActiveRow);Assert.Equal(.5,second.Progress,3);
+    }
+}

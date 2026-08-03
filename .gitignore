@@ -11,5 +11,7 @@ dist/
 *.nupkg
 *.snupkg
 .bootstrap-cache/
+.homektv-*/
 runtime-assets/FFmpeg/*.exe
-
+runtime-assets/AI/
+ai/

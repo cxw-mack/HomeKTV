@@ -9,6 +9,7 @@
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SelfContained>true</SelfContained>
     <PublishSingleFile>true</PublishSingleFile>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
     <PublishTrimmed>false</PublishTrimmed>
     <DebugType>embedded</DebugType>
     <IncludeNativeLibrariesForSelfExtract>false</IncludeNativeLibrariesForSelfExtract>
@@ -27,6 +28,11 @@
     <ProjectReference Include="..\HomeKTV.Lyrics\HomeKTV.Lyrics.csproj" />
     <ProjectReference Include="..\HomeKTV.Player\HomeKTV.Player.csproj" />
     <ProjectReference Include="..\HomeKTV.Server\HomeKTV.Server.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="AiAssociationWindow.xaml.cs;AiManagerWindow.xaml.cs;LyricsReviewWindow.xaml.cs" />
+    <Page Remove="AiAssociationWindow.xaml;AiManagerWindow.xaml;LyricsReviewWindow.xaml" />
   </ItemGroup>
 
 </Project>

@@ -17,9 +17,14 @@ public sealed class PortablePaths
     public string Backups => Resolve("Data/Backups");
     public string Media => Resolve("Media");
     public string Mv => Resolve("Media/MV");
+    public string Audio => Resolve("Media/Audio");
     public string Lyrics => Resolve("Media/Lyrics");
     public string Covers => Resolve("Media/Covers");
+    public string Slideshows => Resolve("Media/Slideshows");
+    public string SlideshowSongs => Resolve("Media/Slideshows/Songs");
+    public string SlideshowDefaults => Resolve("Media/Slideshows/Defaults");
     public string Backgrounds => Resolve("Media/Backgrounds");
+    public string Generated => Resolve("Media/Generated");
     public string ImportBox => Resolve("Media/ImportBox");
     public string Runtime => Resolve("Runtime");
     public string LibVlc => Resolve("Runtime/LibVLC");
@@ -55,7 +60,7 @@ public sealed class PortablePaths
 
     public void EnsureDirectories()
     {
-        foreach (var directory in new[] { Data, Backups, Mv, Lyrics, Covers, Backgrounds, ImportBox, LibVlc, Ffmpeg, Downloads, Web, Logs, Licenses })
+        foreach (var directory in new[] { Data, Backups, Mv, Audio, Lyrics, Covers, SlideshowSongs, SlideshowDefaults, Backgrounds, Generated, ImportBox, LibVlc, Ffmpeg, Downloads, Web, Logs, Licenses })
             Directory.CreateDirectory(directory);
     }
 }

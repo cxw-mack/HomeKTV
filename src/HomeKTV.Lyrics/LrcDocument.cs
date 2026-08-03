@@ -38,7 +38,29 @@ public sealed class LrcDocument
             index + 1 < Lines.Count ? Lines[index + 1] : index < 0 ? Lines[0] : null,
             index);
     }
+
+    public KaraokeDisplayFrame CreateKaraokeFrame(TimeSpan playbackPosition, int offsetMs = 0)
+    {
+        var position = Locate(playbackPosition, offsetMs);
+        if (Lines.Count == 0) return KaraokeDisplayFrame.Empty;
+        if (position.Index < 0)
+            return new KaraokeDisplayFrame(Lines[0].Text, Lines.Count > 1 ? Lines[1].Text : string.Empty, -1, 0);
+
+        var current = Lines[position.Index];
+        var next = position.Index + 1 < Lines.Count ? Lines[position.Index + 1] : null;
+        var activeRow = position.Index % 2;
+        var startMs = current.Timestamp.TotalMilliseconds;
+        var endMs = next?.Timestamp.TotalMilliseconds ?? startMs + 5000;
+        var adjustedMs = playbackPosition.TotalMilliseconds + offsetMs;
+        var progress = Math.Clamp((adjustedMs - startMs) / Math.Max(100, endMs - startMs), 0, 1);
+        return activeRow == 0
+            ? new KaraokeDisplayFrame(current.Text, next?.Text ?? string.Empty, 0, progress)
+            : new KaraokeDisplayFrame(next?.Text ?? string.Empty, current.Text, 1, progress);
+    }
 }
 
 public sealed record LrcPosition(LrcLine? Previous, LrcLine? Current, LrcLine? Next, int Index);
-
+public sealed record KaraokeDisplayFrame(string TopText, string BottomText, int ActiveRow, double Progress)
+{
+    public static KaraokeDisplayFrame Empty { get; } = new(string.Empty, string.Empty, -1, 0);
+}

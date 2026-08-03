@@ -12,19 +12,21 @@ using HomeKTV.Infrastructure.Logging;
 using HomeKTV.Infrastructure.Media;
 using HomeKTV.Player;
 using HomeKTV.Server;
+using HomeKTV.Core.Abstractions;
+using HomeKTV.Core.Models;
 using Serilog;
 
 namespace HomeKTV.App;
 
 public partial class App : System.Windows.Application
 {
-    private HomeKtvDatabase? _database;private HomeKtvWebServer? _server;private LibVlcPlaybackService? _player;private ILogger? _logger;private AutomaticBackupCoordinator? _automaticBackup;
+    private HomeKtvDatabase? _database;private HomeKtvWebServer? _server;private LibVlcPlaybackService? _player;private MediaPlaybackCoordinator? _playbackCoordinator;private SlideshowPlaybackService? _slideshow;private ILogger? _logger;private AutomaticBackupCoordinator? _automaticBackup;
     private Mutex? _instanceMutex;private bool _ownsInstance;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);ShutdownMode=ShutdownMode.OnExplicitShutdown;
-        var paths=PortablePaths.FromBaseDirectory();paths.EnsureDirectories();
+        var paths=PortablePaths.FromBaseDirectory();paths.EnsureDirectories();new DefaultSlideshowAssetGenerator(paths).EnsureCreated();
         if(!TryAcquireSingleInstance(paths.Root)){if(!e.Args.Contains("--health-check",StringComparer.OrdinalIgnoreCase))MessageBox.Show("此便携目录中的 HomeKTV 已经在运行。请切换到现有窗口，不要重复启动。","HomeKTV 已运行",MessageBoxButton.OK,MessageBoxImage.Information);Shutdown(2);return;}
         _logger=LoggingBootstrap.CreateLogger(paths);Log.Logger=_logger;
         DispatcherUnhandledException+=OnDispatcherException;AppDomain.CurrentDomain.UnhandledException+=OnDomainException;TaskScheduler.UnobservedTaskException+=OnTaskException;
@@ -52,8 +54,11 @@ public partial class App : System.Windows.Application
                 if(demoPlaybackPath is null)throw new InvalidOperationException("播放烟测缺少已导入的演示歌曲。\n");
                 _player=new LibVlcPlaybackService(paths);var completed=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);_player.PlaybackEnded+=(_,_)=>completed.TrySetResult();_player.PlaybackFailed+=(_,message)=>completed.TrySetException(new InvalidDataException(message));await _player.PlayAsync(demoPlaybackPath);await completed.Task.WaitAsync(TimeSpan.FromSeconds(30));_logger.Information("LibVLC playback smoke completed");
             }
+            if(e.Args.Contains("--existing-media-switch-smoke",StringComparer.OrdinalIgnoreCase))await RunExistingMediaSwitchSmokeAsync(paths,songs,_logger);
+            if(e.Args.Contains("--portable-media-smoke",StringComparer.OrdinalIgnoreCase))await RunPortableMediaSmokeAsync(paths,importer,_logger);
             if(e.Args.Contains("--health-check",StringComparer.OrdinalIgnoreCase)){_logger.Information("Portable health check completed successfully");Shutdown(0);return;}
             try{_player??=new LibVlcPlaybackService(paths);}catch(Exception exception){_logger.Error(exception,"LibVLC initialization failed; desktop library remains available");}
+            _slideshow=new SlideshowPlaybackService();if(_player is not null)_playbackCoordinator=new MediaPlaybackCoordinator(paths,_player);
             if(loaded.Settings.MobileOrderingEnabled)
             {
                 try{_server=new HomeKtvWebServer(paths,loaded.Settings,songs,queue);await _server.StartAsync();_logger.Information("Mobile server listening at {Address}",_server.LanAddress);}
@@ -70,7 +75,7 @@ public partial class App : System.Windows.Application
                 Shutdown(0);return;
             }
             _automaticBackup=new AutomaticBackupCoordinator(backups,paths,loaded.Settings.AutomaticBackupHours,_logger);_automaticBackup.Start();
-            var viewModel=new MainViewModel(paths,loaded.Settings,_database,songs,queue,importer,httpDownload,transcode,mediaInspection,backups,settingsStore,_player,_server,_logger);
+            var viewModel=new MainViewModel(paths,loaded.Settings,_database,songs,queue,importer,httpDownload,transcode,mediaInspection,backups,settingsStore,_player,_playbackCoordinator,_slideshow,new SlideshowConfigurationStore(paths),new SlideshowImageResolver(paths),new SongDeletionService(paths,songs),_server,_logger);
             var window=new MainWindow(viewModel);MainWindow=window;ShutdownMode=ShutdownMode.OnMainWindowClose;window.Show();
             if(e.Args.Contains("--smoke-ui",StringComparer.OrdinalIgnoreCase))
             {
@@ -93,8 +98,8 @@ public partial class App : System.Windows.Application
         try
         {
             _logger?.Information("HomeKTV shutdown started");
-            try{_player?.Dispose();}catch(Exception exception){_logger?.Error(exception,"Error while disposing LibVLC");}
             try{Task.Run(ShutdownServicesAsync).GetAwaiter().GetResult();}catch(Exception exception){_logger?.Error(exception,"Unexpected error while shutting down HomeKTV services");}
+            try{_playbackCoordinator?.Dispose();_player?.Dispose();}catch(Exception exception){_logger?.Error(exception,"Error while disposing LibVLC");}
             _logger?.Information("HomeKTV shutdown completed");
         }
         finally{(_logger as IDisposable)?.Dispose();Log.CloseAndFlush();if(_ownsInstance){try{_instanceMutex?.ReleaseMutex();}catch(ApplicationException){} }_instanceMutex?.Dispose();}
@@ -104,6 +109,7 @@ public partial class App : System.Windows.Application
     private async Task ShutdownServicesAsync()
     {
         try{if(_server is not null)await _server.DisposeAsync();}catch(Exception exception){_logger?.Error(exception,"Error while stopping mobile server");}
+        try{if(_slideshow is not null)await _slideshow.DisposeAsync();}catch(Exception exception){_logger?.Error(exception,"Error while stopping slideshow service");}
         try{if(_automaticBackup is not null)await _automaticBackup.DisposeAsync();}catch(Exception exception){_logger?.Error(exception,"Error while stopping automatic backup");}
         try{if(_database is not null)await _database.DisposeAsync();}catch(Exception exception){_logger?.Error(exception,"Error while disposing database");}
     }
@@ -129,4 +135,65 @@ public partial class App : System.Windows.Application
         foreach(var suffix in new[]{string.Empty,"-wal","-shm"}){var source=paths.Database+suffix;if(File.Exists(source))File.Move(source,Path.Combine(corruptDirectory,$"HomeKTV-{stamp}.db{suffix}"),true);}
         File.Copy(backup,paths.Database,true);MessageBox.Show("数据库已恢复。HomeKTV 将关闭，请重新打开。","恢复完成",MessageBoxButton.OK,MessageBoxImage.Information);Shutdown(0);return true;
     }
+
+    private async Task RunPortableMediaSmokeAsync(PortablePaths paths,LocalMediaImporter importer,ILogger logger)
+    {
+        var audioSource=Path.Combine(paths.ImportBox,"HomeKTV - 测试音频.mp3");var defaultSource=Path.Combine(paths.ImportBox,"HomeKTV - 默认背景.flac");var videoSource=Path.Combine(paths.ImportBox,"HomeKTV - 测试歌曲.mp4");var slides=Enumerable.Range(1,3).Select(x=>Path.Combine(paths.ImportBox,$"slide-{x:00}.bmp")).ToArray();
+        foreach(var file in new[]{audioSource,defaultSource,videoSource}.Concat(slides))if(!File.Exists(file))throw new FileNotFoundException("便携媒体烟测缺少测试文件。",file);
+        var video=(await importer.ImportAsync(new(videoSource,"混合队列 MV","HomeKTV"))).Song??throw new InvalidDataException("测试 MV 导入失败。");var audio=(await importer.ImportAsync(new(audioSource,"自定义幻灯片音频","HomeKTV",SlideshowImages:slides))).Song??throw new InvalidDataException("测试 MP3 导入失败。");var fallback=(await importer.ImportAsync(new(defaultSource,"默认幻灯片音频","HomeKTV"))).Song??throw new InvalidDataException("测试 FLAC 导入失败。");
+        _player??=new LibVlcPlaybackService(paths);using var coordinator=new MediaPlaybackCoordinator(paths,_player);await using var slideshow=new SlideshowPlaybackService();var store=new SlideshowConfigurationStore(paths);var resolver=new SlideshowImageResolver(paths);
+        var sequence=new[]{video,audio,video,fallback};for(var index=0;index<sequence.Length;index++)
+        {
+            var song=sequence[index];if(index==0){song.MediaType=SongMediaType.VideoWithExternalAudio;song.AccompanimentAudioRelativePath=paths.ToRelative(defaultSource);song.PreferredPlaybackAudio=PreferredPlaybackAudio.Original;}else if(index==2){song.MediaType=SongMediaType.Video;song.PreferredPlaybackAudio=PreferredPlaybackAudio.Original;}
+            var plan=await coordinator.PlayAsync(song);if(song.MediaType is SongMediaType.Video or SongMediaType.VideoWithExternalAudio){if(!plan.ShowVideo||plan.ShowSlideshow)throw new InvalidDataException("MV 场景层级错误。");if(index==0){await Task.Delay(1200);var switchPosition=_player.PositionMs;if(switchPosition<800)throw new InvalidDataException("MV 中途切换烟测未形成有效播放位置。");await coordinator.SwitchAudioAsync(song,PreferredPlaybackAudio.AiAccompaniment);VerifyAudioSwitchDidNotReset(_player,switchPosition,"切换伴奏");if(!_player.IsUsingExternalAudio||_player.IsEmbeddedAudioEnabled)throw CreateAudioStateException(_player,"MV 外部伴奏未启动或原唱未关闭");await VerifyExternalAudioProgressAsync(_player);VerifyExternalAudioDrift(_player,"第一次切换伴奏");var originalPosition=_player.PositionMs;await coordinator.SwitchAudioAsync(song,PreferredPlaybackAudio.Original);VerifyAudioSwitchDidNotReset(_player,originalPosition,"切回原唱");if(_player.IsUsingExternalAudio||!_player.IsEmbeddedAudioEnabled)throw CreateAudioStateException(_player,"MV 切回原唱后没有恢复自带音频");await Task.Delay(1200);var accompanimentPosition=_player.PositionMs;var seekCountBeforeSwitch=_player.ExternalAudioSeekCount;await coordinator.SwitchAudioAsync(song,PreferredPlaybackAudio.AiAccompaniment);VerifyAudioSwitchDidNotReset(_player,accompanimentPosition,"再次切换伴奏");if(_player.ExternalAudioSeekCount!=seekCountBeforeSwitch)throw new InvalidDataException("MV 再次切换伴奏时错误地重置了外部音频游标。");if(!_player.IsUsingExternalAudio||_player.IsEmbeddedAudioEnabled)throw CreateAudioStateException(_player,"MV 再次切换伴奏失败");await VerifyExternalAudioProgressAsync(_player);VerifyExternalAudioDrift(_player,"再次切换伴奏");}if(slideshow.IsRunning||slideshow.CurrentFrame is not null)throw new InvalidDataException("上一首幻灯片覆盖了 MV。");}
+            else{if(plan.ShowVideo||!plan.ShowSlideshow)throw new InvalidDataException("纯音频场景层级错误。");var configuration=await store.LoadAsync(song.Id);var images=resolver.Resolve(song,configuration);if(song.Id==audio.Id&&images.Count!=3)throw new InvalidDataException("自定义三图幻灯片未完整加载。");if(song.Id==fallback.Id&&images.Count<5)throw new InvalidDataException("系统默认图片回退不足五张。");await slideshow.StartAsync(configuration,images);if(slideshow.CurrentFrame is null)throw new InvalidDataException("幻灯片未产生首帧。");}
+            await WaitForPlaybackEndAsync(_player,TimeSpan.FromSeconds(15));coordinator.Stop();await slideshow.StopAsync();if(slideshow.IsRunning||slideshow.CurrentFrame is not null)throw new InvalidDataException("歌曲结束后幻灯片未释放。");logger.Information("Portable mixed playback smoke item {Index}: {Title} / {MediaType}",index+1,song.Title,song.MediaType);
+        }
+    }
+
+    private async Task RunExistingMediaSwitchSmokeAsync(PortablePaths paths,ISongRepository songs,ILogger logger)
+    {
+        var song=(await songs.SearchAsync(null,null,5000)).FirstOrDefault(candidate=>(candidate.MediaType is SongMediaType.Video or SongMediaType.VideoWithExternalAudio)&&!string.IsNullOrWhiteSpace(candidate.AccompanimentAudioRelativePath)&&File.Exists(paths.Resolve(candidate.VideoRelativePath))&&File.Exists(paths.Resolve(candidate.AccompanimentAudioRelativePath)));
+        if(song is null)throw new InvalidDataException("媒体库中没有可用于原唱/伴奏切换检查的 MV。");
+        _player??=new LibVlcPlaybackService(paths);using var coordinator=new MediaPlaybackCoordinator(paths,_player);
+        try
+        {
+            song.PreferredPlaybackAudio=PreferredPlaybackAudio.Original;await coordinator.PlayAsync(song);var middle=Math.Clamp(song.DurationMs/2,5000,30000);coordinator.Seek(middle);await Task.Delay(800);
+            await coordinator.SwitchAudioAsync(song,PreferredPlaybackAudio.AiAccompaniment);if(!_player.IsUsingExternalAudio||_player.IsEmbeddedAudioEnabled)throw CreateAudioStateException(_player,"实际 MV 第一次切换伴奏失败");await VerifyExternalAudioProgressAsync(_player);VerifyExternalAudioDrift(_player,"实际 MV 第一次切换伴奏");
+            await coordinator.SwitchAudioAsync(song,PreferredPlaybackAudio.Original);if(_player.IsUsingExternalAudio||!_player.IsEmbeddedAudioEnabled)throw CreateAudioStateException(_player,"实际 MV 切回原唱失败");await Task.Delay(2000);
+            var positionBeforeSwitch=_player.PositionMs;var seekCountBeforeSwitch=_player.ExternalAudioSeekCount;await coordinator.SwitchAudioAsync(song,PreferredPlaybackAudio.AiAccompaniment);VerifyAudioSwitchDidNotReset(_player,positionBeforeSwitch,"实际 MV 再次切换伴奏");if(_player.ExternalAudioSeekCount!=seekCountBeforeSwitch)throw new InvalidDataException("实际 MV 再次切换伴奏时错误地重置了外部音频游标。");if(!_player.IsUsingExternalAudio||_player.IsEmbeddedAudioEnabled)throw CreateAudioStateException(_player,"实际 MV 再次切换伴奏失败");await VerifyExternalAudioProgressAsync(_player);VerifyExternalAudioDrift(_player,"实际 MV 再次切换伴奏");
+            logger.Information("Existing media switch smoke completed: {Title}, video={VideoMs}, external={ExternalMs}, seeks={SeekCount}",song.Title,_player.PositionMs,_player.ExternalAudioPositionMs,_player.ExternalAudioSeekCount);
+        }
+        finally{coordinator.Stop();}
+    }
+
+    private static async Task WaitForPlaybackEndAsync(LibVlcPlaybackService player,TimeSpan timeout)
+    {
+        var completed=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);EventHandler ended=(_,_)=>completed.TrySetResult();EventHandler<string> failed=(_,message)=>completed.TrySetException(new InvalidDataException(message));player.PlaybackEnded+=ended;player.PlaybackFailed+=failed;try{await completed.Task.WaitAsync(timeout);}finally{player.PlaybackEnded-=ended;player.PlaybackFailed-=failed;}
+    }
+
+    private static async Task VerifyExternalAudioProgressAsync(LibVlcPlaybackService player)
+    {
+        var baseline=player.ExternalAudioPositionMs;
+        for(var attempt=0;attempt<20;attempt++)
+        {
+            await Task.Delay(50);var current=player.ExternalAudioPositionMs;
+            if(current>=baseline+80)return;
+            if(current<baseline)baseline=current;
+        }
+        throw new InvalidDataException("MV 外部伴奏已启动但音频游标没有推进。");
+    }
+
+    private static void VerifyAudioSwitchDidNotReset(LibVlcPlaybackService player,long positionBeforeSwitch,string operation)
+    {
+        if(player.PositionMs+100<positionBeforeSwitch)throw new InvalidDataException($"MV {operation}后时间轴回退到开头。");
+    }
+
+    private static void VerifyExternalAudioDrift(LibVlcPlaybackService player,string operation)
+    {
+        if(Math.Abs(player.ExternalAudioPositionMs-player.PositionMs)>500)throw new InvalidDataException($"MV {operation}后时间线漂移过大。");
+    }
+
+    private static InvalidDataException CreateAudioStateException(LibVlcPlaybackService player,string message) =>
+        new($"{message}：ExternalSelected={player.IsUsingExternalAudio}, AudioTrack={player.MediaPlayer.AudioTrack}, VlcState={player.MediaPlayer.State}, VideoMs={player.PositionMs}, ExternalMs={player.ExternalAudioPositionMs}。");
 }

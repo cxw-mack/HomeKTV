@@ -32,10 +32,14 @@ public sealed class HomeKtvWebServer : IAsyncDisposable
     { _paths=paths;_settings=settings;_songs=songs;_queue=queue;_sessions=sessions??new();_playback=playback??new(); }
 
     public int Port { get; private set; }
-    public string LanAddress => _settings.LanModeEnabled?$"http://{NetworkAddressService.GetPreferredLanAddress()}:{Port}":LocalAddress;
+    public IReadOnlyList<string> LanAddresses => _settings.LanModeEnabled?NetworkAddressService.GetLanAddresses().Select(x=>$"http://{x}:{Port}").ToList():[LocalAddress];
+    public string LanAddress => LanAddresses[0];
     public string LocalAddress => $"http://127.0.0.1:{Port}";
     public bool IsRunning => _app is not null;
     public event EventHandler? QueueChanged;
+    public event Func<bool,CancellationToken,Task>? LyricsVisibilityRequested;
+    public event Func<PlaybackControlCommand,CancellationToken,Task>? PlaybackControlRequested;
+    public event Func<int,CancellationToken,Task>? PlaybackVolumeRequested;
 
     public async Task NotifyQueueChangedAsync(CancellationToken cancellationToken=default)
     {
@@ -93,6 +97,7 @@ public sealed class HomeKtvWebServer : IAsyncDisposable
         app.MapGet("/health",()=>Results.Ok(new { status="ok",port=Port,lan=_settings.LanModeEnabled }));
         app.MapPost("/api/session",(CreateSessionRequest request)=> { try{return Results.Ok(_sessions.Create(request.Nickname));}catch(ArgumentException e){return Results.BadRequest(new{error=e.Message});}catch(InvalidOperationException e){return Results.Json(new{error=e.Message},statusCode:429);} });
         app.MapGet("/api/state",async (HttpRequest request,CancellationToken ct)=>{var viewer=Authenticate(request);return Results.Ok(new { playback=_playback.Current,queue=MapQueue(await _queue.GetActiveAsync(ct),viewer?.Id) });});
+        app.MapGet("/api/playback/lyrics",()=>Results.Ok(new { visible=_playback.Current.LyricsVisible,available=_playback.Current.LyricsAvailable }));
         app.MapGet("/api/songs",async (string? q,string? language,int? limit,HttpRequest request,CancellationToken ct)=>
         {
             var result=await _songs.SearchAsync(q,language,limit??100,ct);var viewer=Authenticate(request);
@@ -118,6 +123,28 @@ public sealed class HomeKtvWebServer : IAsyncDisposable
         {if(!IsAdmin(request))return Results.Unauthorized();var changed=await _queue.MoveAsync(id,body.Direction,null,true,ct);if(changed)await BroadcastQueueAsync(hub,ct);return changed?Results.NoContent():Results.StatusCode(StatusCodes.Status409Conflict);});
         app.MapDelete("/api/admin/queue",async (HttpRequest request,IHubContext<HomeKtvHub> hub,CancellationToken ct)=>
         { if(!IsAdmin(request))return Results.Unauthorized();await _queue.ClearAsync(ct);await BroadcastQueueAsync(hub,ct);return Results.NoContent(); });
+        app.MapPost("/api/playback/lyrics",async (LyricsVisibilityRequest body,HttpRequest request,CancellationToken ct)=>
+        {
+            if(Authenticate(request) is null)return Results.Unauthorized();
+            var handler=LyricsVisibilityRequested;if(handler is null)return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+            await handler(body.Visible,ct);return Results.NoContent();
+        });
+        app.MapPost("/api/playback/control",async (PlaybackControlRequest body,HttpRequest request,CancellationToken ct)=>
+        {
+            if(Authenticate(request) is null)return Results.Unauthorized();
+            if(!Enum.TryParse<PlaybackControlCommand>(body.Command,true,out var command))return Results.BadRequest(new{error="未知播放控制命令。"});
+            if(_playback.Current.QueueItemId is null)return Results.Conflict(new{error="当前没有正在播放的歌曲。"});
+            if(command==PlaybackControlCommand.Accompaniment&&!_playback.Current.CanUseAccompaniment)return Results.Conflict(new{error="当前歌曲没有可用伴奏。"});
+            var handler=PlaybackControlRequested;if(handler is null)return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+            await handler(command,ct);return Results.NoContent();
+        });
+        app.MapPost("/api/playback/volume",async (PlaybackVolumeRequest body,HttpRequest request,CancellationToken ct)=>
+        {
+            if(Authenticate(request) is null)return Results.Unauthorized();
+            if(body.Volume is <0 or >125)return Results.BadRequest(new{error="音量必须在 0 到 125 之间。"});
+            var handler=PlaybackVolumeRequested;if(handler is null)return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+            await handler(body.Volume,ct);return Results.NoContent();
+        });
         app.MapHub<HomeKtvHub>("/hub");
     }
 

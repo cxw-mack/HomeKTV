@@ -11,17 +11,21 @@ public sealed record GuestSessionGrantDto(string Id, string Nickname, bool IsAdm
 public sealed record EnqueueRequest(long SongId);
 public sealed record FavoriteRequest(bool IsFavorite);
 public sealed record MoveQueueRequest(int Direction);
-public sealed record QueueSongDto(long Id, string Title, string ArtistDisplayName);
+public sealed record LyricsVisibilityRequest(bool Visible);
+public sealed record PlaybackControlRequest(string Command);
+public sealed record PlaybackVolumeRequest(int Volume);
+public enum PlaybackControlCommand { TogglePause, Restart, Skip, Original, Accompaniment }
+public sealed record QueueSongDto(long Id, string Title, string ArtistDisplayName, SongMediaType MediaType, bool HasLyrics, bool HasAccompaniment, AiProcessingStatus AiProcessingStatus, bool HasCustomSlideshow);
 public sealed record QueueItemDto(long Id,long SongId,string RequestedBy,DateTimeOffset RequestedAt,long Position,bool IsPinned,QueueItemState State,string? ErrorMessage,bool IsMine,QueueSongDto Song)
 {
     public static QueueItemDto From(QueueItem item,string? viewerSessionId)=>new(item.Id,item.SongId,item.RequestedBy,item.RequestedAt,item.Position,item.IsPinned,item.State,item.ErrorMessage,
         viewerSessionId is not null&&CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(item.GuestSessionId),Encoding.UTF8.GetBytes(viewerSessionId)),
-        new QueueSongDto(item.SongId,item.Song?.Title??"未知歌曲",item.Song?.ArtistDisplayName??string.Empty));
+        new QueueSongDto(item.SongId,item.Song?.Title??"未知歌曲",item.Song?.ArtistDisplayName??string.Empty,item.Song?.MediaType??SongMediaType.Video,!string.IsNullOrWhiteSpace(item.Song?.LyricRelativePath),item.Song?.AccompanimentAudioTrack is not null||!string.IsNullOrWhiteSpace(item.Song?.AccompanimentAudioRelativePath),item.Song?.AiProcessingStatus??AiProcessingStatus.NotRequested,item.Song?.HasCustomSlideshow??false));
 }
 
-public sealed record PlaybackSnapshot(long? QueueItemId, string? Title, string? Artist, string State, long PositionMs, string? NextTitle)
+public sealed record PlaybackSnapshot(long? QueueItemId, string? Title, string? Artist, string State, long PositionMs, string? NextTitle, bool LyricsVisible, bool LyricsAvailable, string AudioMode, bool CanUseAccompaniment, int Volume)
 {
-    public static PlaybackSnapshot Idle { get; } = new(null, null, null, "Idle", 0, null);
+    public static PlaybackSnapshot Idle { get; } = new(null, null, null, "Idle", 0, null, true, false, "Original", false, 80);
 }
 
 public sealed class GuestSessionRegistry

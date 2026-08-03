@@ -29,9 +29,9 @@ public sealed class MediaInspectionService(PortablePaths paths,HomeKtvDatabase d
     {
         MediaAvailability availability;string details;MediaProbeResult? probe=null;
         string? absolute=null;
-        try{absolute=paths.Resolve(song.VideoRelativePath);}
+        try{absolute=paths.Resolve(song.PrimaryMediaRelativePath??throw new InvalidDataException("歌曲没有可播放媒体路径。"));}
         catch(Exception exception) when(exception is ArgumentException or InvalidOperationException){availability=MediaAvailability.Missing;details="媒体路径无效："+exception.Message;return await PersistAsync(song,availability,details,null,cancellationToken);}
-        if(!File.Exists(absolute)){availability=MediaAvailability.Missing;details="MV 文件不存在";return await PersistAsync(song,availability,details,null,cancellationToken);}
+        if(!File.Exists(absolute)){availability=MediaAvailability.Missing;details="媒体文件不存在";return await PersistAsync(song,availability,details,null,cancellationToken);}
         if(!inspector.IsAvailable)
         {
             availability=!HasReadableLyrics(song)?MediaAvailability.NoLyrics:MediaAvailability.Healthy;

@@ -38,7 +38,9 @@ public sealed class HomeKtvDatabase : IAsyncDisposable
             command.CommandText = SchemaSql;
             await command.ExecuteNonQueryAsync(ct);
 
-            command.CommandText = "INSERT OR IGNORE INTO SchemaMigrations(Version, AppliedAt) VALUES(1, $now);";
+            await EnsureSongColumnsAsync(connection, transaction, ct);
+
+            command.CommandText = "INSERT OR IGNORE INTO SchemaMigrations(Version, AppliedAt) VALUES(2, $now);";
             command.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
             await command.ExecuteNonQueryAsync(ct);
 
@@ -50,6 +52,26 @@ public sealed class HomeKtvDatabase : IAsyncDisposable
             await command.ExecuteNonQueryAsync(ct);
             return 0;
         }, cancellationToken);
+    }
+
+    private static async Task EnsureSongColumnsAsync(SqliteConnection connection, SqliteTransaction transaction, CancellationToken cancellationToken)
+    {
+        var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var query = connection.CreateCommand();
+        query.Transaction = transaction;
+        query.CommandText = "PRAGMA table_info(Songs);";
+        await using (var reader = await query.ExecuteReaderAsync(cancellationToken))
+            while (await reader.ReadAsync(cancellationToken)) existing.Add(reader.GetString(1));
+
+        foreach (var definition in SongColumnMigrations)
+        {
+            var name = definition[..definition.IndexOf(' ')];
+            if (existing.Contains(name)) continue;
+            var alter = connection.CreateCommand();
+            alter.Transaction = transaction;
+            alter.CommandText = $"ALTER TABLE Songs ADD COLUMN {definition};";
+            await alter.ExecuteNonQueryAsync(cancellationToken);
+        }
     }
 
     public Task<SqliteConnection> OpenConnectionAsync(CancellationToken cancellationToken = default) => OpenConnectionCoreAsync(cancellationToken);
@@ -181,7 +203,16 @@ public sealed class HomeKtvDatabase : IAsyncDisposable
           Id INTEGER PRIMARY KEY AUTOINCREMENT, Title TEXT NOT NULL, ArtistDisplayName TEXT NOT NULL,
           Pinyin TEXT NOT NULL DEFAULT '', PinyinInitials TEXT NOT NULL DEFAULT '', Alias TEXT NOT NULL DEFAULT '',
           Language TEXT NOT NULL DEFAULT '其他', CategoryId INTEGER NULL,
-          VideoRelativePath TEXT NOT NULL, LyricRelativePath TEXT NULL, CoverRelativePath TEXT NULL,
+          VideoRelativePath TEXT NOT NULL DEFAULT '', MediaType INTEGER NOT NULL DEFAULT 0,
+          AudioRelativePath TEXT NULL, OriginalAudioRelativePath TEXT NULL, VocalAudioRelativePath TEXT NULL,
+          AccompanimentAudioRelativePath TEXT NULL, LyricRelativePath TEXT NULL, CoverRelativePath TEXT NULL,
+          SlideshowDirectoryRelativePath TEXT NULL, SlideshowConfigRelativePath TEXT NULL,
+          PreferredPlaybackAudio INTEGER NOT NULL DEFAULT 0, ExternalAudioOffsetMs INTEGER NOT NULL DEFAULT 0,
+          HasCustomSlideshow INTEGER NOT NULL DEFAULT 0, UseDefaultSlideshow INTEGER NOT NULL DEFAULT 1,
+          AudioDurationMs INTEGER NOT NULL DEFAULT 0, AiProcessingStatus INTEGER NOT NULL DEFAULT 0,
+          AiReviewStatus INTEGER NOT NULL DEFAULT 0, AiLyricsConfidence REAL NULL, AiSeparationEngine TEXT NULL,
+          AiTranscriptionEngine TEXT NULL, AiModelVersion TEXT NULL, AiProcessedAt TEXT NULL,
+          Album TEXT NOT NULL DEFAULT '', Genre TEXT NOT NULL DEFAULT '', Year INTEGER NULL,
           DurationMs INTEGER NOT NULL DEFAULT 0, Width INTEGER NOT NULL DEFAULT 0, Height INTEGER NOT NULL DEFAULT 0,
           FileSize INTEGER NOT NULL DEFAULT 0, FileHash TEXT NOT NULL DEFAULT '', OriginalAudioTrack INTEGER NULL,
           AccompanimentAudioTrack INTEGER NULL, DefaultAudioMode INTEGER NOT NULL DEFAULT 2, LyricOffsetMs INTEGER NOT NULL DEFAULT 0,
@@ -223,4 +254,30 @@ public sealed class HomeKtvDatabase : IAsyncDisposable
         CREATE UNIQUE INDEX IF NOT EXISTS UX_Songs_FileHash ON Songs(FileHash) WHERE FileHash <> '';
         CREATE INDEX IF NOT EXISTS IX_QueueItems_StatePosition ON QueueItems(State, IsPinned DESC, Position);
         """;
+
+    private static readonly string[] SongColumnMigrations =
+    [
+        "MediaType INTEGER NOT NULL DEFAULT 0",
+        "AudioRelativePath TEXT NULL",
+        "OriginalAudioRelativePath TEXT NULL",
+        "VocalAudioRelativePath TEXT NULL",
+        "AccompanimentAudioRelativePath TEXT NULL",
+        "SlideshowDirectoryRelativePath TEXT NULL",
+        "SlideshowConfigRelativePath TEXT NULL",
+        "PreferredPlaybackAudio INTEGER NOT NULL DEFAULT 0",
+        "ExternalAudioOffsetMs INTEGER NOT NULL DEFAULT 0",
+        "HasCustomSlideshow INTEGER NOT NULL DEFAULT 0",
+        "UseDefaultSlideshow INTEGER NOT NULL DEFAULT 1",
+        "AudioDurationMs INTEGER NOT NULL DEFAULT 0",
+        "AiProcessingStatus INTEGER NOT NULL DEFAULT 0",
+        "AiReviewStatus INTEGER NOT NULL DEFAULT 0",
+        "AiLyricsConfidence REAL NULL",
+        "AiSeparationEngine TEXT NULL",
+        "AiTranscriptionEngine TEXT NULL",
+        "AiModelVersion TEXT NULL",
+        "AiProcessedAt TEXT NULL",
+        "Album TEXT NOT NULL DEFAULT ''",
+        "Genre TEXT NOT NULL DEFAULT ''",
+        "Year INTEGER NULL"
+    ];
 }

@@ -10,6 +10,7 @@ HomeKTV 源码与便携包使用以下固定正式版本。许可证正文或获
 | CommunityToolkit.Mvvm | 8.4.2 | MIT |
 | LibVLCSharp.WPF | 3.10.0 | LGPL-2.1-or-later |
 | VideoLAN.LibVLC.Windows | 3.0.23.1 | LGPL-2.1-or-later / GPL-2.0-or-later（按模块） |
+| NAudio | 2.2.1 | MIT |
 | QRCoder | 1.8.0 | MIT |
 | ToolGood.Words.Pinyin | 3.1.0.4 | MIT |
 | Serilog | 4.4.0 | Apache-2.0 |

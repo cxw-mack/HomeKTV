@@ -12,7 +12,8 @@ public sealed class SqliteQueueRepository(HomeKtvDatabase database) : IQueueRepo
             command.CommandText = """
                 SELECT q.Id,q.SongId,q.GuestSessionId,q.RequestedBy,q.RequestedAt,q.Position,q.IsPinned,q.State,q.ErrorMessage,
                        s.Title,s.ArtistDisplayName,s.VideoRelativePath,s.LyricRelativePath,s.LyricOffsetMs,s.IsAvailable,
-                       s.OriginalAudioTrack,s.AccompanimentAudioTrack,s.DefaultAudioMode
+                       s.OriginalAudioTrack,s.AccompanimentAudioTrack,s.DefaultAudioMode,s.MediaType,s.AudioRelativePath,
+                       s.AccompanimentAudioRelativePath,s.AiProcessingStatus,s.HasCustomSlideshow
                 FROM QueueItems q JOIN Songs s ON s.Id=q.SongId
                 WHERE q.State IN (0,1,2,3) ORDER BY q.IsPinned DESC,q.Position,q.RequestedAt,q.Id;
                 """;
@@ -26,7 +27,8 @@ public sealed class SqliteQueueRepository(HomeKtvDatabase database) : IQueueRepo
                     RequestedAt=DateTimeOffset.Parse(reader.GetString(4)), Position=reader.GetInt64(5), IsPinned=reader.GetBoolean(6), State=(QueueItemState)reader.GetInt32(7),
                     ErrorMessage=reader.IsDBNull(8)?null:reader.GetString(8), Song=new Song { Id=reader.GetInt64(1), Title=reader.GetString(9), ArtistDisplayName=reader.GetString(10),
                         VideoRelativePath=reader.GetString(11), LyricRelativePath=reader.IsDBNull(12)?null:reader.GetString(12), LyricOffsetMs=reader.GetInt32(13), IsAvailable=reader.GetBoolean(14),
-                        OriginalAudioTrack=reader.IsDBNull(15)?null:reader.GetInt32(15),AccompanimentAudioTrack=reader.IsDBNull(16)?null:reader.GetInt32(16),DefaultAudioMode=(AudioMode)reader.GetInt32(17) }
+                        OriginalAudioTrack=reader.IsDBNull(15)?null:reader.GetInt32(15),AccompanimentAudioTrack=reader.IsDBNull(16)?null:reader.GetInt32(16),DefaultAudioMode=(AudioMode)reader.GetInt32(17),
+                        MediaType=(SongMediaType)reader.GetInt32(18),AudioRelativePath=reader.IsDBNull(19)?null:reader.GetString(19),AccompanimentAudioRelativePath=reader.IsDBNull(20)?null:reader.GetString(20),AiProcessingStatus=(AiProcessingStatus)reader.GetInt32(21),HasCustomSlideshow=reader.GetBoolean(22) }
                 });
             }
             return result;

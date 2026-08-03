@@ -1,8 +1,8 @@
 ﻿[CmdletBinding()]
-param([int]$Port=16888)
+param([ValidateRange(0,65535)][int]$Port=0,[switch]$NoPrompt)
 $ErrorActionPreference='Stop';$root=Split-Path -Parent $MyInvocation.MyCommand.Path;$exe=Join-Path $root 'HomeKTV.exe';if(-not(Test-Path -LiteralPath $exe)){throw '请从 HomeKTV 便携版根目录运行此脚本。'}
+if($Port -eq 0){$process=Get-Process -Name 'HomeKTV' -ErrorAction SilentlyContinue|Select-Object -First 1;$listeningPort=if($process){Get-NetTCPConnection -State Listen -OwningProcess $process.Id -ErrorAction SilentlyContinue|Where-Object {$_.LocalAddress -in '0.0.0.0','::'}|Select-Object -First 1 -ExpandProperty LocalPort};$Port=if($listeningPort){$listeningPort}else{16888}}
 Write-Host "将仅为当前 HomeKTV.exe 创建 Windows 专用网络 TCP 入站规则，端口 $Port。" -ForegroundColor Yellow
-if((Read-Host '输入 YES 确认') -ne 'YES'){Write-Host '已取消。';exit 0}
-$identity=[Security.Principal.WindowsIdentity]::GetCurrent();$principal=New-Object Security.Principal.WindowsPrincipal($identity);if(-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){Start-Process powershell.exe -Verb RunAs -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',"`"$($MyInvocation.MyCommand.Path)`"",'-Port',$Port);exit}
-$name='HomeKTV 家庭点歌（专用网络）';Get-NetFirewallRule -DisplayName $name -ErrorAction SilentlyContinue|Remove-NetFirewallRule;New-NetFirewallRule -DisplayName $name -Direction Inbound -Action Allow -Program $exe -Protocol TCP -LocalPort $Port -Profile Private|Out-Null;Write-Host '防火墙规则已添加。' -ForegroundColor Green
-
+if(-not $NoPrompt -and (Read-Host '输入 YES 确认') -ne 'YES'){Write-Host '已取消。';exit 0}
+$identity=[Security.Principal.WindowsIdentity]::GetCurrent();$principal=New-Object Security.Principal.WindowsPrincipal($identity);if(-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){$arguments=@('-NoProfile','-ExecutionPolicy','Bypass','-File',"`"$($MyInvocation.MyCommand.Path)`"",'-Port',$Port);if($NoPrompt){$arguments+='-NoPrompt'};Start-Process powershell.exe -Verb RunAs -ArgumentList $arguments;exit}
+$name='HomeKTV 家庭点歌（本地网络）';Get-NetFirewallRule -DisplayName $name -ErrorAction SilentlyContinue|Remove-NetFirewallRule;New-NetFirewallRule -DisplayName $name -Direction Inbound -Action Allow -Program $exe -Protocol TCP -LocalPort $Port -RemoteAddress LocalSubnet -Profile Any|Out-Null;Write-Host '防火墙规则已添加，仅允许本地子网访问。' -ForegroundColor Green

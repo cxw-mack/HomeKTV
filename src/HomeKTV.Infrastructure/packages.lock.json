@@ -74,6 +74,12 @@
           "ToolGood.Words.Pinyin": "[3.1.0.4, )"
         }
       },
+      "homektv.lyrics": {
+        "type": "Project",
+        "dependencies": {
+          "HomeKTV.Core": "[1.0.0, )"
+        }
+      },
       "ToolGood.Words.Pinyin": {
         "type": "CentralTransitive",
         "requested": "[3.1.0.4, )",

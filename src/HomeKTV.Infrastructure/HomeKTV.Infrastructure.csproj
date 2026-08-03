@@ -10,6 +10,7 @@
   <ItemGroup>
     <ProjectReference Include="..\HomeKTV.Core\HomeKTV.Core.csproj" />
     <ProjectReference Include="..\HomeKTV.Library\HomeKTV.Library.csproj" />
+    <ProjectReference Include="..\HomeKTV.Lyrics\HomeKTV.Lyrics.csproj" />
   </ItemGroup>
 
 </Project>

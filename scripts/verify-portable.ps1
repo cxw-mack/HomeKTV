@@ -2,14 +2,19 @@
 param([string]$PortableDirectory)
 $ErrorActionPreference='Stop';$repoRoot=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'));if(-not $PortableDirectory){$PortableDirectory=Join-Path $repoRoot 'dist/HomeKTV-Portable-win-x64'};$portable=[IO.Path]::GetFullPath($PortableDirectory)
 $requiredFiles=@('HomeKTV.exe','Start-HomeKTV.bat','Data/HomeKTV.db','Data/Settings.json','Runtime/LibVLC/libvlc.dll','Runtime/LibVLC/libvlccore.dll','Runtime/FFmpeg/ffmpeg.exe','Runtime/FFmpeg/ffprobe.exe','Web/index.html','THIRD_PARTY_NOTICES.md','README-使用说明.txt')
-$requiredDirectories=@('Data/Backups','Media/MV','Media/Lyrics','Media/Covers','Media/Backgrounds','Media/ImportBox','Runtime/LibVLC/plugins','Runtime/FFmpeg','Web/assets','Logs','Licenses')
+$requiredDirectories=@('Data/Backups','Media/MV','Media/Audio','Media/Lyrics','Media/Covers','Media/Backgrounds','Media/ImportBox','Media/Slideshows/Songs','Media/Slideshows/Defaults','Media/Generated','Runtime/LibVLC/plugins','Runtime/FFmpeg','Web/assets','Logs','Models','Licenses')
 $missing=@();foreach($file in $requiredFiles){if(-not(Test-Path -LiteralPath (Join-Path $portable $file))){$missing+=$file}};foreach($directory in $requiredDirectories){if(-not(Test-Path -LiteralPath (Join-Path $portable $directory) -PathType Container)){$missing+=$directory}}
 if($missing.Count){throw "便携包缺少：$($missing -join ', ')"}
+$executableBytes=(Get-Item -LiteralPath (Join-Path $portable 'HomeKTV.exe')).Length
+if($executableBytes -gt 120MB){throw "HomeKTV.exe 超过 120 MB，单文件压缩可能未启用：$([math]::Round($executableBytes/1MB,1)) MB"}
+$releaseZip=Join-Path (Split-Path $portable -Parent) 'HomeKTV-Portable-win-x64.zip'
+$zipBytes=$null;if((Split-Path $portable -Leaf) -eq 'HomeKTV-Portable-win-x64' -and (Test-Path -LiteralPath $releaseZip)){$zipBytes=(Get-Item -LiteralPath $releaseZip).Length;if($zipBytes -gt 250MB){throw "便携 ZIP 超过 250 MB，发布压缩可能失效：$([math]::Round($zipBytes/1MB,1)) MB"}}
 if((Get-ChildItem -LiteralPath (Join-Path $portable 'Runtime/LibVLC/plugins') -Recurse -Filter '*.dll').Count -lt 20){throw 'LibVLC 插件目录不完整。'}
+if((Get-ChildItem -LiteralPath (Join-Path $portable 'Media/Slideshows/Defaults') -File|Where-Object Extension -in @('.bmp','.jpg','.jpeg','.png')).Count -lt 5){throw '系统默认幻灯片图片少于五张。'};if(-not(Test-Path -LiteralPath (Join-Path $portable 'Media/Slideshows/Defaults/LICENSE.txt'))){throw '默认图片缺少许可证说明。'}
 & (Join-Path $portable 'Runtime/FFmpeg/ffprobe.exe') -version|Select-Object -First 1;if($LASTEXITCODE -ne 0){throw 'FFprobe 不能运行。'}
 $settings=Get-Content -LiteralPath (Join-Path $portable 'Data/Settings.json') -Raw;if($settings -match '(?i)[A-Z]:\\'){throw 'Settings.json 包含硬编码绝对盘符。'}
 $unexpected=Get-ChildItem -LiteralPath $portable -Directory -Recurse|Where-Object {$_.Name -in @('node_modules','obj','bin','tests','TestResults')};if($unexpected){throw "便携包包含开发目录：$($unexpected.FullName -join ', ')"}
-$textFiles=Get-ChildItem -LiteralPath $portable -File -Recurse|Where-Object {$_.Extension -in @('.json','.txt','.bat','.ps1','.html','.js','.css','.md','.log')};if($textFiles -and (Select-String -LiteralPath $textFiles.FullName -SimpleMatch $repoRoot -Quiet)){throw '便携包文本资源泄漏了开发目录路径。'}
+$mutableRoots=@('Data','Media','Logs')|ForEach-Object{[IO.Path]::GetFullPath((Join-Path $portable $_))+[IO.Path]::DirectorySeparatorChar};$textFiles=Get-ChildItem -LiteralPath $portable -File -Recurse|Where-Object {$file=$_.FullName;$_.Extension -in @('.json','.txt','.bat','.ps1','.html','.js','.css','.md','.log') -and -not($mutableRoots|Where-Object{$file.StartsWith($_,[StringComparison]::OrdinalIgnoreCase)})};if($textFiles -and (Select-String -LiteralPath $textFiles.FullName -SimpleMatch $repoRoot -Quiet)){throw '便携包静态文本资源泄漏了开发目录路径。'}
 if($textFiles -and (Select-String -LiteralPath $textFiles.FullName -Pattern '(?i)[A-Z]:\\Users\\|/Users/|\\CXW\\' -Quiet)){throw '便携包文本资源包含开发机用户或用户目录。'}
 $webEntry=Get-Content -LiteralPath (Join-Path $portable 'Web/index.html') -Raw;if($webEntry -match '(?i)<(?:script|link)[^>]+(?:src|href)=["''][ ]*https?://'){throw '手机页入口依赖远程 CDN，断网时无法启动。'}
 $verifyRoot=Join-Path ([IO.Path]::GetTempPath()) ('HomeKTV-Portable-Verify-'+[Guid]::NewGuid().ToString('N'));$resolvedVerify=[IO.Path]::GetFullPath($verifyRoot);if(-not $resolvedVerify.StartsWith([IO.Path]::GetTempPath(),[StringComparison]::OrdinalIgnoreCase)){throw '临时验证路径不安全。'}
@@ -20,6 +25,9 @@ try{
     New-Item -ItemType Directory -Path $resolvedVerify|Out-Null
     Copy-Item -LiteralPath $portable -Destination $resolvedVerify -Recurse
     $copy=Join-Path $resolvedVerify (Split-Path $portable -Leaf);$exe=Join-Path $copy 'HomeKTV.exe';Invoke-Smoke $exe @('--health-check') 30000 '复制路径健康检查'
+    $offlineVariables=@('HTTP_PROXY','HTTPS_PROXY','ALL_PROXY');$previous=@{};foreach($name in $offlineVariables){$previous[$name]=[Environment]::GetEnvironmentVariable($name,'Process');[Environment]::SetEnvironmentVariable($name,'http://127.0.0.1:1','Process')};try{Invoke-Smoke $exe @('--health-check') 30000 '模拟断网健康检查'}finally{foreach($name in $offlineVariables){[Environment]::SetEnvironmentVariable($name,$previous[$name],'Process')}}
+
+    & (Join-Path $PSScriptRoot 'create-demo-media.ps1') -OutputDirectory (Join-Path $copy 'Media/ImportBox');Invoke-Smoke $exe @('--portable-media-smoke','--health-check') 120000 '纯音频、默认/自定义幻灯片与 MV 混合播放检查'
 
     $configured=Get-Content -LiteralPath (Join-Path $copy 'Data/Settings.json') -Raw|ConvertFrom-Json;$listener=$null;try{$listener=[Net.Sockets.TcpListener]::new([Net.IPAddress]::Any,[int]$configured.ServerPort);$listener.Start()}catch [Net.Sockets.SocketException]{}try{Invoke-Smoke $exe @('--server-smoke') 90000 '端口冲突回退与手机服务健康检查'}finally{if($listener){$listener.Stop()}}
 
@@ -29,4 +37,4 @@ try{
 
     $ffmpegPath=Join-Path $copy 'Runtime/FFmpeg';$ffmpegBackup=Join-Path $copy 'Runtime/FFmpeg.verify-backup';Move-Item -LiteralPath $ffmpegPath -Destination $ffmpegBackup;try{Invoke-Smoke $exe @('--smoke-ui') 90000 '缺少 FFmpeg 时的 WPF/LibVLC 降级启动检查'}finally{if(Test-Path -LiteralPath $ffmpegPath){Remove-Item -LiteralPath $ffmpegPath -Recurse -Force};Move-Item -LiteralPath $ffmpegBackup -Destination $ffmpegPath}
 }finally{Remove-VerifyDirectory $resolvedVerify}
-Write-Host '[HomeKTV] PASS：目录/依赖/Web/相对路径/端口冲突/配置恢复/首次建库/FFmpeg 降级启动全部通过。' -ForegroundColor Green
+$zipSummary=if($null -eq $zipBytes){'ZIP 未提供'}else{"ZIP $([math]::Round($zipBytes/1MB,1)) MB"};Write-Host "[HomeKTV] PASS：目录/依赖/Web/相对路径/端口冲突/配置恢复/首次建库/FFmpeg 降级启动全部通过；EXE $([math]::Round($executableBytes/1MB,1)) MB，$zipSummary。" -ForegroundColor Green

@@ -211,7 +211,15 @@ public sealed class DatabaseIntegrationTests
         private TestDatabase(string root, PortablePaths paths, HomeKtvDatabase database) { Root=root;Paths=paths;Database=database; }
         public string Root { get; } public PortablePaths Paths { get; } public HomeKtvDatabase Database { get; }
         public static async Task<TestDatabase> CreateAsync(){var root=Path.Combine(Path.GetTempPath(),"HomeKTV-Db-"+Guid.NewGuid().ToString("N"));var paths=new PortablePaths(root);var db=new HomeKtvDatabase(paths);await db.InitializeAsync();return new(root,paths,db);}
-        public async ValueTask DisposeAsync(){await Database.DisposeAsync();if(Directory.Exists(Root))Directory.Delete(Root,true);}
+        public async ValueTask DisposeAsync()
+        {
+            await Database.DisposeAsync();
+            for(var attempt=0;Directory.Exists(Root);attempt++)
+            {
+                try{Directory.Delete(Root,true);}
+                catch(IOException) when(attempt<4){await Task.Delay(50*(attempt+1));}
+            }
+        }
     }
 
     private sealed class NonPumpingSynchronizationContext : SynchronizationContext

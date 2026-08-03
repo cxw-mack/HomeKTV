@@ -2,14 +2,14 @@
 
 ## 总览
 
-HomeKTV 采用单进程模块化桌面架构。WPF 是生命周期宿主；ASP.NET Core WebApplication 在后台端口启动；SQLite 保存歌曲库和队列；LibVLC 负责播放并把画面绑定到独立 WPF 大屏；Vue 静态资源由内嵌服务器从便携包 `Web` 目录提供。
+HomeKTV 采用桌面主进程内组合的模块化架构。WPF 是主生命周期宿主；ASP.NET Core WebApplication 在后台端口启动；SQLite 保存歌曲库和统一队列；LibVLC 负责 MV、纯音频以及外部伴奏同步播放；Vue 静态资源由内嵌服务器从便携包 `Web` 目录提供。FFmpeg 用于媒体检查、转码和从视频伴奏中提取音轨。
 
 ```text
 WPF 管理台 ─┐
 第二屏窗口 ─┼─ 应用服务 / 事件 ─ Core ─ SQLite
 Vue 手机端 ─┘        │          │
        SignalR/API ─ Server      ├─ Library / Lyrics
-                                 └─ Player / LibVLC
+                                 └─ Player / LibVLC / Slideshow / FFmpeg
 ```
 
 ## 依赖方向
@@ -31,7 +31,11 @@ SQLite 启用外键和 busy timeout。所有应用内读写都经进程内操作
 
 ## 播放和队列
 
-队列支持 FIFO 与按点歌人轮转。置顶项目始终优先，同一用户内部保持相对顺序。播放器只发布状态事件，不直接修改数据库；队列编排服务响应完成/错误事件，更新状态并推进下一首，播放错误不会结束 WPF 进程。
+队列支持 `Video`、`Audio`、`VideoWithExternalAudio` 与 `AudioWithSlideshow` 混排。置顶项目始终优先，同一用户内部保持相对顺序。`MediaPlaybackCoordinator` 统一选择场景；纯音频启动按歌曲配置计时的幻灯片，暂停、继续、定位、重唱和切歌同步；外部音轨每 500ms 检查漂移，超过阈值自动纠正，丢失时回退 MV 内嵌音频。LibVLC 仅由主播放器和独立审核试听播放器持有，窗口关闭和应用退出都会释放媒体、播放器与核心实例。
+
+## 独立伴奏
+
+单曲导入可附带音频或视频伴奏。音频按原格式复制到便携媒体目录；视频由 FFmpeg 提取第一条音轨为无损 FLAC。视频歌曲播放时，外部伴奏与 MV 使用同一时间线；切回原唱时伴奏静音但继续运行，再切伴奏不重新定位。歌曲可保存毫秒级外部音频偏移。
 
 ## 网络和安全
 

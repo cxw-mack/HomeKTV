@@ -62,6 +62,51 @@ public sealed class ServerIntegrationTests
     }
 
     [Fact]
+    public async Task MobileSessionCanToggleLyricsWithoutAdministratorPin()
+    {
+        await using var fixture=await ServerFixture.CreateAsync();using var client=new HttpClient { BaseAddress=new Uri(fixture.Server.LocalAddress) };
+        bool? requested=null;fixture.Server.LyricsVisibilityRequested+=(visible,_)=>{requested=visible;return Task.CompletedTask;};
+        var state=await client.GetFromJsonAsync<JsonElement>("api/playback/lyrics");Assert.True(state.GetProperty("visible").GetBoolean());Assert.False(state.GetProperty("available").GetBoolean());
+        var denied=await client.PostAsJsonAsync("api/playback/lyrics",new{visible=false});Assert.Equal(HttpStatusCode.Unauthorized,denied.StatusCode);Assert.Null(requested);
+        var session=await CreateSession(client,"手机用户");using var allowed=Authorized(HttpMethod.Post,"api/playback/lyrics",session,new{visible=false});var response=await client.SendAsync(allowed);Assert.Equal(HttpStatusCode.NoContent,response.StatusCode);Assert.False(requested);
+    }
+
+    [Fact]
+    public async Task MobileSessionCanSendPlaybackControlCommands()
+    {
+        await using var fixture=await ServerFixture.CreateAsync();using var client=new HttpClient { BaseAddress=new Uri(fixture.Server.LocalAddress) };
+        await fixture.Server.NotifyPlaybackChangedAsync(new(1,"测试歌曲","HomeKTV","Playing",1200,null,true,true,"Original",true,80));
+        PlaybackControlCommand? requested=null;fixture.Server.PlaybackControlRequested+=(command,_)=>{requested=command;return Task.CompletedTask;};
+        var denied=await client.PostAsJsonAsync("api/playback/control",new{command="skip"});Assert.Equal(HttpStatusCode.Unauthorized,denied.StatusCode);Assert.Null(requested);
+        var session=await CreateSession(client,"手机用户");using var allowed=Authorized(HttpMethod.Post,"api/playback/control",session,new{command="accompaniment"});var response=await client.SendAsync(allowed);Assert.Equal(HttpStatusCode.NoContent,response.StatusCode);Assert.Equal(PlaybackControlCommand.Accompaniment,requested);
+    }
+
+    [Fact]
+    public async Task MobileSessionCanRestartWithoutAdministratorPin()
+    {
+        await using var fixture=await ServerFixture.CreateAsync();using var client=new HttpClient { BaseAddress=new Uri(fixture.Server.LocalAddress) };await fixture.Server.NotifyPlaybackChangedAsync(new(1,"测试歌曲","HomeKTV","Playing",1200,null,true,true,"Original",true,80));PlaybackControlCommand? requested=null;fixture.Server.PlaybackControlRequested+=(command,_)=>{requested=command;return Task.CompletedTask;};var session=await CreateSession(client,"iPhone 用户");using var restart=Authorized(HttpMethod.Post,"api/playback/control",session,new{command="restart"});var response=await client.SendAsync(restart);Assert.Equal(HttpStatusCode.NoContent,response.StatusCode);Assert.Equal(PlaybackControlCommand.Restart,requested);
+    }
+
+    [Fact]
+    public async Task MobilePlaybackControlRejectsUnavailableActionsWithoutAdministratorPin()
+    {
+        await using var fixture=await ServerFixture.CreateAsync();using var client=new HttpClient { BaseAddress=new Uri(fixture.Server.LocalAddress) };var session=await CreateSession(client,"手机用户");
+        using(var idle=Authorized(HttpMethod.Post,"api/playback/control",session,new{command="skip"}))Assert.Equal(HttpStatusCode.Conflict,(await client.SendAsync(idle)).StatusCode);
+        await fixture.Server.NotifyPlaybackChangedAsync(new(1,"测试歌曲","HomeKTV","Playing",1200,null,true,true,"Original",false,80));
+        using var unavailable=Authorized(HttpMethod.Post,"api/playback/control",session,new{command="accompaniment"});Assert.Equal(HttpStatusCode.Conflict,(await client.SendAsync(unavailable)).StatusCode);
+    }
+
+    [Fact]
+    public async Task MobileSessionCanAdjustVolumeWithoutAdministratorPin()
+    {
+        await using var fixture=await ServerFixture.CreateAsync();using var client=new HttpClient { BaseAddress=new Uri(fixture.Server.LocalAddress) };
+        int? requested=null;fixture.Server.PlaybackVolumeRequested+=(volume,_)=>{requested=volume;return Task.CompletedTask;};
+        var denied=await client.PostAsJsonAsync("api/playback/volume",new{volume=90});Assert.Equal(HttpStatusCode.Unauthorized,denied.StatusCode);Assert.Null(requested);
+        var session=await CreateSession(client,"手机用户");using(var invalid=Authorized(HttpMethod.Post,"api/playback/volume",session,new{volume=126}))Assert.Equal(HttpStatusCode.BadRequest,(await client.SendAsync(invalid)).StatusCode);
+        using var allowed=Authorized(HttpMethod.Post,"api/playback/volume",session,new{volume=95});var response=await client.SendAsync(allowed);Assert.Equal(HttpStatusCode.NoContent,response.StatusCode);Assert.Equal(95,requested);
+    }
+
+    [Fact]
     public async Task LanModeIsReachableThroughAdvertisedIpv4Address()
     {
         var root=Path.Combine(Path.GetTempPath(),"HomeKTV-Lan-"+Guid.NewGuid().ToString("N"));var paths=new PortablePaths(root);paths.EnsureDirectories();await File.WriteAllTextAsync(Path.Combine(paths.Web,"index.html"),"ok");var database=new HomeKtvDatabase(paths);HomeKtvWebServer? server=null;
@@ -70,6 +115,12 @@ public sealed class ServerIntegrationTests
             await database.InitializeAsync();var settings=new HomeKtvSettings{ServerPort=ServerFixture.GetFreePort(IPAddress.Any),LanModeEnabled=true};server=new HomeKtvWebServer(paths,settings,new SqliteSongRepository(database),new SqliteQueueRepository(database));await server.StartAsync();using var client=new HttpClient{BaseAddress=new Uri(server.LanAddress),Timeout=TimeSpan.FromSeconds(10)};var response=await client.GetAsync("health");Assert.Equal(HttpStatusCode.OK,response.StatusCode);Assert.DoesNotContain("localhost",server.LanAddress,StringComparison.OrdinalIgnoreCase);
         }
         finally{if(server is not null)await server.DisposeAsync();await database.DisposeAsync();if(Directory.Exists(root))Directory.Delete(root,true);}
+    }
+
+    [Fact]
+    public void LanAddressCandidatesAreOrderedDistinctIpv4Addresses()
+    {
+        var addresses=NetworkAddressService.GetLanAddresses();Assert.NotEmpty(addresses);Assert.Equal(addresses[0],NetworkAddressService.GetPreferredLanAddress());Assert.Equal(addresses.Count,addresses.Distinct(StringComparer.Ordinal).Count());Assert.All(addresses,x=>Assert.Equal(System.Net.Sockets.AddressFamily.InterNetwork,IPAddress.Parse(x).AddressFamily));
     }
 
     private static async Task<GuestSessionGrantDto> CreateSession(HttpClient client,string nickname)

@@ -12,6 +12,8 @@ public interface ISongRepository
     Task<IReadOnlySet<long>> GetFavoriteSongIdsAsync(string sessionId,CancellationToken cancellationToken=default);
     Task SetLyricOffsetAsync(long songId, int offsetMs, CancellationToken cancellationToken = default);
     Task RecordPlaybackAsync(long songId, string? requestedBy, string result, CancellationToken cancellationToken = default);
+    Task<IReadOnlySet<string>> GetReferencedMediaPathsAsync(long excludingSongId, CancellationToken cancellationToken = default);
+    Task DeleteAsync(long songId, CancellationToken cancellationToken = default);
 }
 
 public interface IQueueRepository
@@ -38,6 +40,32 @@ public interface IPlaybackService : IDisposable
     void Resume();
     void Stop();
     void Restart();
+    void Seek(long positionMs);
     void SetAudioTrack(int trackId);
     void SetAudioChannel(AudioChannelMode channel);
+}
+
+public interface IMediaPlaybackCoordinator : IDisposable
+{
+    PlaybackPlan? CurrentPlan { get; }
+    Task<PlaybackPlan> PlayAsync(Song song, CancellationToken cancellationToken = default);
+    Task SwitchAudioAsync(Song song, PreferredPlaybackAudio audio, CancellationToken cancellationToken = default);
+    void Pause();
+    void Resume();
+    void Seek(long positionMs);
+    void Restart();
+    void Stop();
+}
+
+public interface ISlideshowPlaybackService : IAsyncDisposable
+{
+    event EventHandler<SlideshowFrame>? FrameChanged;
+    bool IsRunning { get; }
+    SlideshowFrame? CurrentFrame { get; }
+    Task StartAsync(SlideshowConfiguration configuration, IReadOnlyList<string> imageRelativePaths, CancellationToken cancellationToken = default);
+    void Pause();
+    void Resume();
+    void Seek(long positionMs);
+    void Restart();
+    Task StopAsync();
 }
