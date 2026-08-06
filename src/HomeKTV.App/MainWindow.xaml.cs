@@ -17,8 +17,8 @@ public partial class MainWindow : Window
     public MainWindow(MainViewModel viewModel)
     {
         InitializeComponent();DataContext=_viewModel=viewModel;
-        Loaded+=OnLoaded;Closed+=(_,_)=>_playerWindow?.Close();
-        viewModel.ShowQrRequested+=(_,_)=>ShowQr();viewModel.ConfigureMobileAccessRequested+=(_,_)=>ConfigureMobileAccess();viewModel.ImportRequested+=async (_,_)=>await ImportAsync();viewModel.UrlImportRequested+=(_,_)=>new UrlImportWindow(_viewModel){Owner=this}.ShowDialog();viewModel.TranscodeRequested+=(_,_)=>new TranscodeWindow(_viewModel){Owner=this}.ShowDialog();viewModel.BatchImportRequested+=async (_,_)=>await ScanFolderAsync();viewModel.ImportBoxRequested+=async (_,_)=>await ScanImportBoxAsync(false);viewModel.RestoreRequested+=async (_,_)=>await RestoreAsync();viewModel.OpenPlayerRequested+=(_,_)=>OpenPlayer();viewModel.ClosePlayerRequested+=(_,_)=>_playerWindow?.Close();viewModel.CycleDisplayRequested+=(_,_)=>{OpenPlayer();_playerWindow?.MoveToNextScreen();};viewModel.SlideshowEditorRequested+=(_,_)=>new SlideshowEditorWindow(_viewModel){Owner=this}.ShowDialog();viewModel.DeleteSongRequested+=song=>_ = DeleteSongAsync(song);
+        Loaded+=OnLoaded;Closed+=(_,_)=>{if(_playerWindow is not null){_playerWindow.CloseForShutdown();_playerWindow=null;}};
+        viewModel.ShowQrRequested+=(_,_)=>ShowQr();viewModel.ConfigureMobileAccessRequested+=(_,_)=>ConfigureMobileAccess();viewModel.ImportRequested+=async (_,_)=>await ImportAsync();viewModel.UrlImportRequested+=(_,_)=>new UrlImportWindow(_viewModel){Owner=this}.ShowDialog();viewModel.TranscodeRequested+=(_,_)=>new TranscodeWindow(_viewModel){Owner=this}.ShowDialog();viewModel.BatchImportRequested+=async (_,_)=>await ScanFolderAsync();viewModel.ImportBoxRequested+=async (_,_)=>await ScanImportBoxAsync(false);viewModel.RestoreRequested+=async (_,_)=>await RestoreAsync();viewModel.OpenPlayerRequested+=(_,_)=>OpenPlayer();viewModel.ClosePlayerRequested+=(_,_)=>_playerWindow?.HidePlayer();viewModel.CycleDisplayRequested+=(_,_)=>{OpenPlayer();_playerWindow?.MoveToNextScreen();};viewModel.SlideshowEditorRequested+=(_,_)=>new SlideshowEditorWindow(_viewModel){Owner=this}.ShowDialog();viewModel.DeleteSongRequested+=song=>_ = DeleteSongAsync(song);
     }
 
     private async void OnLoaded(object sender,RoutedEventArgs e)
@@ -32,7 +32,7 @@ public partial class MainWindow : Window
     {
         if(_viewModel.Player is null){MessageBox.Show("LibVLC 未正确加载，大屏播放器暂不可用。请检查 Runtime/LibVLC。","播放器不可用",MessageBoxButton.OK,MessageBoxImage.Warning);return;}
         if(_playerWindow is null||!_playerWindow.IsLoaded){_playerWindow=new PlayerWindow(_viewModel);_playerWindow.Closed+=(_,_)=>_playerWindow=null;_playerWindow.Show();}
-        else{_playerWindow.Activate();}
+        else{_playerWindow.ShowPlayer();}
     }
 
     private void ShowQr()

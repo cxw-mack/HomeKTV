@@ -8,6 +8,7 @@ using System.Windows.Threading;
 using System.Windows.Media.Animation;
 using System.Windows.Interop;
 using System.Runtime.InteropServices;
+using System.ComponentModel;
 using HomeKTV.App.ViewModels;
 using HomeKTV.Lyrics;
 using Microsoft.Win32;
@@ -18,13 +19,13 @@ namespace HomeKTV.App;
 
 public partial class PlayerWindow : Window
 {
-    private readonly MainViewModel _viewModel;private readonly DispatcherTimer _timer;private LrcDocument _lyrics=LrcParser.Parse(null);private string? _loadedLyric;private string? _loadedSlide;private bool _useSlideA;private int _displayIndex;
+    private readonly MainViewModel _viewModel;private readonly DispatcherTimer _timer;private LrcDocument _lyrics=LrcParser.Parse(null);private string? _loadedLyric;private string? _loadedSlide;private bool _useSlideA;private int _displayIndex;private bool _closeForShutdown;
     public PlayerWindow(MainViewModel viewModel)
     {
         InitializeComponent();DataContext=_viewModel=viewModel;_displayIndex=viewModel.Settings.PlaybackDisplayIndex;
         Resources["LyricShadow"]=new DropShadowEffect{BlurRadius=12,ShadowDepth=1,Color=Colors.Black,Opacity=.9};
         _timer=new DispatcherTimer(TimeSpan.FromMilliseconds(100),DispatcherPriority.Render,TimerTick,Dispatcher);_timer.Start();
-        Loaded+=(_,_)=>{VideoView.MediaPlayer=_viewModel.Player?.MediaPlayer;PlaceOnPreferredScreen();LoadIdleBackground();};Closed+=OnClosed;SystemEvents.DisplaySettingsChanged+=DisplaySettingsChanged;CreateQr();
+        Loaded+=(_,_)=>{VideoView.MediaPlayer=_viewModel.Player?.MediaPlayer;PlaceOnPreferredScreen();LoadIdleBackground();};Closing+=OnClosing;Closed+=OnClosed;SystemEvents.DisplaySettingsChanged+=DisplaySettingsChanged;CreateQr();
     }
 
     private void PlaceOnPreferredScreen()
@@ -36,6 +37,10 @@ public partial class PlayerWindow : Window
     }
 
     public void MoveToNextScreen(){var count=Screen.AllScreens.Length;if(count==0)return;_displayIndex=(_displayIndex+1)%count;_viewModel.Settings.PlaybackDisplayIndex=_displayIndex;PlaceOnPreferredScreen();}
+    public void ShowPlayer(){if(!IsVisible)Show();Activate();}
+    public void HidePlayer(){if(!_closeForShutdown)Hide();}
+    public void CloseForShutdown(){_closeForShutdown=true;if(IsLoaded)Close();}
+    private void CloseButton_Click(object sender,RoutedEventArgs e)=>HidePlayer();
 
     private async void TimerTick(object? sender,EventArgs e)
     {
@@ -87,8 +92,9 @@ public partial class PlayerWindow : Window
 
     private void SetLyricLine(System.Windows.Controls.TextBlock line,string text,bool active,double progress)
     {
-        var settings=_viewModel.Settings.Lyrics;var normal=ParseBrush(settings.FontColor,Brushes.White);var current=ParseBrush(settings.CurrentFontColor,Brushes.Gold);
+        var settings=_viewModel.Settings.Lyrics;var normal=ParseBrush(settings.FontColor,Brushes.White);var current=ParseBrush(settings.CurrentFontColor,Brushes.DodgerBlue);
         line.Inlines.Clear();line.Foreground=active?current:normal;
+        line.Effect=CreateLyricEffect(settings,active);
         if(!active||settings.DisplayMode!=HomeKTV.Core.Models.LyricsDisplayMode.Karaoke||text.Length==0){line.Text=text;return;}
         var highlighted=Math.Clamp((int)Math.Ceiling(text.Length*progress),0,text.Length);
         if(highlighted>0)line.Inlines.Add(new System.Windows.Documents.Run(text[..highlighted]){Foreground=current});
@@ -110,6 +116,18 @@ public partial class PlayerWindow : Window
 
     private static Brush ParseBrush(string value,Brush fallback){try{return new BrushConverter().ConvertFromString(value) as Brush??fallback;}catch(FormatException){return fallback;}catch(NotSupportedException){return fallback;}}
     private static Color ParseColor(string value,Color fallback){try{return (Color)ColorConverter.ConvertFromString(value);}catch(FormatException){return fallback;}catch(NotSupportedException){return fallback;}}
+    private static Effect? CreateLyricEffect(HomeKTV.Core.Configuration.LyricsDisplaySettings settings,bool active)
+    {
+        if(!settings.ShadowEnabled&&settings.OutlineThickness<=0)return null;
+        var outline=ParseColor(settings.OutlineColor,Colors.Black);
+        return new DropShadowEffect
+        {
+            Color=outline,
+            BlurRadius=Math.Max(1,settings.OutlineThickness*2.5),
+            ShadowDepth=active?0:1,
+            Opacity=.98
+        };
+    }
 
     private void CreateQr()
     {
@@ -134,6 +152,7 @@ public partial class PlayerWindow : Window
         if(HomeKTV.Core.Configuration.LyricsDisplayPolicy.MatchesShortcut(_viewModel.Settings.Lyrics,key.ToString())){_viewModel.ToggleLyrics();e.Handled=true;return;}
         if(key==Key.Escape){WindowStyle=WindowStyle.SingleBorderWindow;ResizeMode=ResizeMode.CanResize;Topmost=false;WindowState=WindowState.Normal;UpdateLayout();var target=Screen.FromHandle(new WindowInteropHelper(this).Handle);var area=target.WorkingArea;var width=Math.Min(1280,area.Width);var height=Math.Min(720,area.Height);SetWindowPos(new WindowInteropHelper(this).Handle,IntPtr.Zero,area.Left+(area.Width-width)/2,area.Top+(area.Height-height)/2,width,height,0x0040);}
     }
+    private void OnClosing(object? sender,CancelEventArgs e){if(_closeForShutdown)return;e.Cancel=true;HidePlayer();}
     private void OnClosed(object? sender,EventArgs e){_timer.Stop();SystemEvents.DisplaySettingsChanged-=DisplaySettingsChanged;SlideImageA.Source=SlideImageB.Source=SlideBackground.Source=null;VideoView.MediaPlayer=null;}
 
     [DllImport("user32.dll",SetLastError=true)]private static extern bool SetWindowPos(IntPtr hWnd,IntPtr hWndInsertAfter,int x,int y,int cx,int cy,uint flags);

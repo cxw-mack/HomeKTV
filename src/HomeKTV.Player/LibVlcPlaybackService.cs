@@ -73,6 +73,8 @@ public sealed class LibVlcPlaybackService : IPlaybackService
         set { lock(_sync){_volume=Math.Clamp(value,0,125);MediaPlayer.Volume=_externalAudioSelected?0:_volume;if(_externalGain is not null)_externalGain.Volume=GetExternalVolume();} }
     }
 
+    public static float VolumeToExternalGain(int volume)=>Math.Clamp(volume,0,125)/100f;
+
     public Task PlayAsync(string absoluteMediaPath, CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this); cancellationToken.ThrowIfCancellationRequested();
@@ -182,7 +184,7 @@ public sealed class LibVlcPlaybackService : IPlaybackService
         MediaPlayer.SetOutputDevice(deviceId, null); return true;
     }
 
-    public void SetAudioTrack(int trackId) => MediaPlayer.SetAudioTrack(trackId);
+    public void SetAudioTrack(int trackId){lock(_sync){MediaPlayer.SetAudioTrack(trackId);if(!_externalAudioSelected)MediaPlayer.Volume=_volume;}}
     public void SetAudioChannel(AudioChannelMode channel)
     {
         var value = channel switch { AudioChannelMode.Left => AudioOutputChannel.Left, AudioChannelMode.Right => AudioOutputChannel.Right, _ => AudioOutputChannel.Stereo };
@@ -269,7 +271,7 @@ public sealed class LibVlcPlaybackService : IPlaybackService
             }
         }
     }
-    private float GetExternalVolume()=>Math.Clamp(_volume/100f,0,1);
+    private float GetExternalVolume()=>VolumeToExternalGain(_volume);
     private void StartExternalAudioCore(string path,long positionMs,float volume,bool startOutput=true)
     {
         try

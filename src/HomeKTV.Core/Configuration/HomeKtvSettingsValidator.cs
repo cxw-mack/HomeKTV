@@ -23,9 +23,9 @@ public static class HomeKtvSettingsValidator
         if(settings.SchemaVersion<HomeKtvSettings.CurrentSchemaVersion)
         {
             settings.Lyrics.DisplayMode=LyricsDisplayMode.Karaoke;
-            if(Math.Abs(settings.Lyrics.FontSize-36)<.01)settings.Lyrics.FontSize=42;
-            if(string.Equals(settings.Lyrics.CurrentFontColor,"#FFFF75A0",StringComparison.OrdinalIgnoreCase))settings.Lyrics.CurrentFontColor="#FFFFD54F";
-            if(Math.Abs(settings.Lyrics.OutlineThickness-1)<.01)settings.Lyrics.OutlineThickness=2;
+            if(Math.Abs(settings.Lyrics.FontSize-36)<.01||Math.Abs(settings.Lyrics.FontSize-42)<.01||Math.Abs(settings.Lyrics.FontSize-64)<.01||Math.Abs(settings.Lyrics.FontSize-115)<.01)settings.Lyrics.FontSize=80;
+            if(string.Equals(settings.Lyrics.CurrentFontColor,"#FFFF75A0",StringComparison.OrdinalIgnoreCase)||string.Equals(settings.Lyrics.CurrentFontColor,"#FFFFD54F",StringComparison.OrdinalIgnoreCase))settings.Lyrics.CurrentFontColor="#FF1E40FF";
+            if(Math.Abs(settings.Lyrics.OutlineThickness-1)<.01||Math.Abs(settings.Lyrics.OutlineThickness-2)<.01)settings.Lyrics.OutlineThickness=3;
         }
         settings.SchemaVersion=HomeKtvSettings.CurrentSchemaVersion;settings.Ai.Enabled=false;
         settings.Ai.CpuThreads=Math.Clamp(settings.Ai.CpuThreads,1,Math.Max(1,Environment.ProcessorCount));settings.Ai.MaxConcurrentTasks=1;
@@ -36,7 +36,7 @@ public static class HomeKtvSettingsValidator
         if(!Enum.IsDefined(settings.Slideshow.FitMode))settings.Slideshow.FitMode=SlideshowFitMode.ContainBlurBackground;
         settings.Lyrics.ToggleShortcutKey=string.IsNullOrWhiteSpace(settings.Lyrics.ToggleShortcutKey)?"F7":settings.Lyrics.ToggleShortcutKey.Trim();
         settings.Lyrics.FontFamily=string.IsNullOrWhiteSpace(settings.Lyrics.FontFamily)?"Microsoft YaHei UI":settings.Lyrics.FontFamily.Trim();
-        settings.Lyrics.FontSize=Math.Clamp(settings.Lyrics.FontSize,12,96);
+        settings.Lyrics.FontSize=Math.Clamp(settings.Lyrics.FontSize,12,140);
         settings.Lyrics.OutlineThickness=Math.Clamp(settings.Lyrics.OutlineThickness,0,8);
         settings.Lyrics.BackgroundOpacity=Math.Clamp(settings.Lyrics.BackgroundOpacity,0,1);
         settings.Lyrics.LineSpacing=Math.Clamp(settings.Lyrics.LineSpacing,0,40);

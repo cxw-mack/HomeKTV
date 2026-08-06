@@ -4,7 +4,7 @@ namespace HomeKTV.Core.Configuration;
 
 public sealed class HomeKtvSettings
 {
-    public const int CurrentSchemaVersion = 2;
+    public const int CurrentSchemaVersion = 5;
     public int SchemaVersion { get; set; }
     public string MediaRoot { get; set; } = "Media";
     public int PlaybackDisplayIndex { get; set; } = 1;
@@ -71,11 +71,11 @@ public sealed class LyricsDisplaySettings
     public string ToggleShortcutKey { get; set; } = "F7";
     public LyricsDisplayMode DisplayMode { get; set; } = LyricsDisplayMode.Karaoke;
     public string FontFamily { get; set; } = "Microsoft YaHei UI";
-    public double FontSize { get; set; } = 42;
+    public double FontSize { get; set; } = 80;
     public string FontColor { get; set; } = "#FFFFFFFF";
-    public string CurrentFontColor { get; set; } = "#FFFFD54F";
+    public string CurrentFontColor { get; set; } = "#FF1E40FF";
     public string OutlineColor { get; set; } = "#FF000000";
-    public double OutlineThickness { get; set; } = 2;
+    public double OutlineThickness { get; set; } = 3;
     public bool ShadowEnabled { get; set; } = true;
     public bool TranslucentBackground { get; set; } = false;
     public double BackgroundOpacity { get; set; } = 0.35;

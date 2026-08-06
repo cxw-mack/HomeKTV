@@ -7,6 +7,7 @@ namespace HomeKTV.IntegrationTests;
 
 public sealed class MixedPlaybackFeatureTests
 {
+    [Fact] public void OriginalAndExternalAudioUseTheSameVolumeRange(){Assert.Equal(0f,LibVlcPlaybackService.VolumeToExternalGain(0));Assert.Equal(1f,LibVlcPlaybackService.VolumeToExternalGain(100));Assert.Equal(1.25f,LibVlcPlaybackService.VolumeToExternalGain(125));Assert.Equal(0f,LibVlcPlaybackService.VolumeToExternalGain(-10));}
     [Fact] public async Task AudioCompletionLeavesFollowingMvReady()
     {
         await using var fixture=await FeatureTestRoot.CreateAsync();var (queue,items)=await CreateQueueAsync(fixture,[SongMediaType.Audio,SongMediaType.Video]);await queue.SetStateAsync(items[0].Id,QueueItemState.Finished);var next=Assert.Single(await queue.GetActiveAsync());Assert.Equal(SongMediaType.Video,next.Song!.MediaType);

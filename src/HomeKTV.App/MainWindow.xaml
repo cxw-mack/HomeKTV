@@ -121,7 +121,7 @@
                                     <StackPanel Grid.Column="1">
                                         <TextBlock Text="歌词样式" FontSize="21" FontWeight="Bold"/>
                                         <TextBlock Text="字体" Foreground="{StaticResource MutedBrush}" Margin="0,16,0,4"/><TextBox Text="{Binding Settings.Lyrics.FontFamily}"/>
-                                        <TextBlock Text="字号" Foreground="{StaticResource MutedBrush}" Margin="0,10,0,4"/><Slider Minimum="12" Maximum="96" Value="{Binding Settings.Lyrics.FontSize}"/>
+                                        <TextBlock Text="字号" Foreground="{StaticResource MutedBrush}" Margin="0,10,0,4"/><Slider Minimum="12" Maximum="140" Value="{Binding Settings.Lyrics.FontSize}"/>
                                         <TextBlock Text="普通歌词颜色" Foreground="{StaticResource MutedBrush}" Margin="0,10,0,4"/><TextBox Text="{Binding Settings.Lyrics.FontColor}"/>
                                         <TextBlock Text="当前歌词颜色" Foreground="{StaticResource MutedBrush}" Margin="0,10,0,4"/><TextBox Text="{Binding Settings.Lyrics.CurrentFontColor}"/>
                                         <CheckBox Content="文字阴影" IsChecked="{Binding Settings.Lyrics.ShadowEnabled}" Margin="0,12,0,4"/>

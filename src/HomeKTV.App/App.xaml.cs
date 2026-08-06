@@ -191,6 +191,11 @@ public partial class App : System.Windows.Application
 
     private static void VerifyExternalAudioDrift(LibVlcPlaybackService player,string operation)
     {
+        for(var attempt=0;attempt<20;attempt++)
+        {
+            if(Math.Abs(player.ExternalAudioPositionMs-player.PositionMs)<=500)return;
+            Thread.Sleep(50);
+        }
         if(Math.Abs(player.ExternalAudioPositionMs-player.PositionMs)>500)throw new InvalidDataException($"MV {operation}后时间线漂移过大。");
     }
 
