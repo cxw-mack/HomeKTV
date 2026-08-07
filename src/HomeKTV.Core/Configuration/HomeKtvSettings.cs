@@ -4,13 +4,14 @@ namespace HomeKTV.Core.Configuration;
 
 public sealed class HomeKtvSettings
 {
-    public const int CurrentSchemaVersion = 5;
+    public const int CurrentSchemaVersion = 7;
     public int SchemaVersion { get; set; }
     public string MediaRoot { get; set; } = "Media";
     public int PlaybackDisplayIndex { get; set; } = 1;
     public bool PlaybackFullscreen { get; set; } = true;
     public string DefaultAudioOutput { get; set; } = string.Empty;
     public int DefaultVolume { get; set; } = 80;
+    public double AccompanimentVolumeGain { get; set; } = 0.4;
     public AudioMode DefaultAudioMode { get; set; } = AudioMode.Automatic;
     public QueueOrderingMode QueueOrderingMode { get; set; } = QueueOrderingMode.FairRotation;
     public bool MobileOrderingEnabled { get; set; } = true;

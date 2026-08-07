@@ -22,7 +22,7 @@ public partial class PlayerWindow : Window
     private readonly MainViewModel _viewModel;private readonly DispatcherTimer _timer;private LrcDocument _lyrics=LrcParser.Parse(null);private string? _loadedLyric;private string? _loadedSlide;private bool _useSlideA;private int _displayIndex;private bool _closeForShutdown;
     public PlayerWindow(MainViewModel viewModel)
     {
-        InitializeComponent();DataContext=_viewModel=viewModel;_displayIndex=viewModel.Settings.PlaybackDisplayIndex;
+        InitializeComponent();DataContext=_viewModel=viewModel;_displayIndex=viewModel.Settings.PlaybackDisplayIndex;IsVisibleChanged+=PlayerWindow_IsVisibleChanged;
         Resources["LyricShadow"]=new DropShadowEffect{BlurRadius=12,ShadowDepth=1,Color=Colors.Black,Opacity=.9};
         _timer=new DispatcherTimer(TimeSpan.FromMilliseconds(100),DispatcherPriority.Render,TimerTick,Dispatcher);_timer.Start();
         Loaded+=(_,_)=>{VideoView.MediaPlayer=_viewModel.Player?.MediaPlayer;PlaceOnPreferredScreen();LoadIdleBackground();};Closing+=OnClosing;Closed+=OnClosed;SystemEvents.DisplaySettingsChanged+=DisplaySettingsChanged;CreateQr();
@@ -37,10 +37,30 @@ public partial class PlayerWindow : Window
     }
 
     public void MoveToNextScreen(){var count=Screen.AllScreens.Length;if(count==0)return;_displayIndex=(_displayIndex+1)%count;_viewModel.Settings.PlaybackDisplayIndex=_displayIndex;PlaceOnPreferredScreen();}
-    public void ShowPlayer(){if(!IsVisible)Show();Activate();}
-    public void HidePlayer(){if(!_closeForShutdown)Hide();}
+    public void ShowPlayer(){if(!IsVisible)Show();SetOwnedOverlayWindowsVisible(true);Activate();}
+    public void HidePlayer(){if(_closeForShutdown)return;SetOwnedOverlayWindowsVisible(false);Hide();}
     public void CloseForShutdown(){_closeForShutdown=true;if(IsLoaded)Close();}
-    private void CloseButton_Click(object sender,RoutedEventArgs e)=>HidePlayer();
+
+    private void PlayerWindow_IsVisibleChanged(object sender,DependencyPropertyChangedEventArgs e)
+    {
+        if(e.NewValue is bool visible)SetOwnedOverlayWindowsVisible(visible);
+    }
+
+    private void SetOwnedOverlayWindowsVisible(bool visible)
+    {
+        foreach(var ownedWindow in OwnedWindows.OfType<Window>().ToArray())
+        {
+            if(visible)
+            {
+                if(ownedWindow.IsVisible)continue;
+                try{ownedWindow.Show();}catch(InvalidOperationException){ }
+            }
+            else if(ownedWindow.IsVisible)
+            {
+                ownedWindow.Hide();
+            }
+        }
+    }
 
     private async void TimerTick(object? sender,EventArgs e)
     {
@@ -153,7 +173,7 @@ public partial class PlayerWindow : Window
         if(key==Key.Escape){WindowStyle=WindowStyle.SingleBorderWindow;ResizeMode=ResizeMode.CanResize;Topmost=false;WindowState=WindowState.Normal;UpdateLayout();var target=Screen.FromHandle(new WindowInteropHelper(this).Handle);var area=target.WorkingArea;var width=Math.Min(1280,area.Width);var height=Math.Min(720,area.Height);SetWindowPos(new WindowInteropHelper(this).Handle,IntPtr.Zero,area.Left+(area.Width-width)/2,area.Top+(area.Height-height)/2,width,height,0x0040);}
     }
     private void OnClosing(object? sender,CancelEventArgs e){if(_closeForShutdown)return;e.Cancel=true;HidePlayer();}
-    private void OnClosed(object? sender,EventArgs e){_timer.Stop();SystemEvents.DisplaySettingsChanged-=DisplaySettingsChanged;SlideImageA.Source=SlideImageB.Source=SlideBackground.Source=null;VideoView.MediaPlayer=null;}
+    private void OnClosed(object? sender,EventArgs e){_timer.Stop();SystemEvents.DisplaySettingsChanged-=DisplaySettingsChanged;IsVisibleChanged-=PlayerWindow_IsVisibleChanged;SetOwnedOverlayWindowsVisible(false);SlideImageA.Source=SlideImageB.Source=SlideBackground.Source=null;VideoView.MediaPlayer=null;}
 
     [DllImport("user32.dll",SetLastError=true)]private static extern bool SetWindowPos(IntPtr hWnd,IntPtr hWndInsertAfter,int x,int y,int cx,int cy,uint flags);
 }

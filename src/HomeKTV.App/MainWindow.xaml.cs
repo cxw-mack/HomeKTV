@@ -75,18 +75,18 @@ public partial class MainWindow : Window
 
     private async Task ScanFolderAsync()
     {
-        var dialog=new OpenFolderDialog{Title="选择包含“歌手 - 歌名”媒体的文件夹",Multiselect=false};
+        var dialog=new OpenFolderDialog{Title="选择乐库根目录（每首歌曲一个文件夹）",Multiselect=false};
         if(dialog.ShowDialog(this)!=true)return;await ConfirmBatchAsync(_viewModel.ScanImportFolder(dialog.FolderName,true),false);
     }
 
     private async Task ScanImportBoxAsync(bool silentWhenEmpty)
     {
-        var candidates=_viewModel.GetImportBoxCandidates();if(candidates.Count==0){if(!silentWhenEmpty)MessageBox.Show("Media/ImportBox 中没有符合“歌手 - 歌名”规则的新媒体。","导入箱",MessageBoxButton.OK,MessageBoxImage.Information);return;}await ConfirmBatchAsync(candidates,true);
+        var candidates=_viewModel.GetImportBoxCandidates();if(candidates.Count==0){if(!silentWhenEmpty)MessageBox.Show("Media/ImportBox 中没有可导入的歌曲文件或歌曲文件夹。","导入箱",MessageBoxButton.OK,MessageBoxImage.Information);return;}await ConfirmBatchAsync(candidates,true);
     }
 
     private async Task ConfirmBatchAsync(IReadOnlyList<MediaImportCandidate> candidates,bool cleanupImportBox)
     {
-        if(candidates.Count==0){MessageBox.Show("没有识别到符合命名规则的视频或音频文件。","批量扫描",MessageBoxButton.OK,MessageBoxImage.Information);return;}
+        if(candidates.Count==0){MessageBox.Show("没有识别到可导入的视频、音频或歌曲文件夹。","批量扫描",MessageBoxButton.OK,MessageBoxImage.Information);return;}
         var window=new BatchImportWindow(candidates){Owner=this};if(window.ShowDialog()==true)await _viewModel.ImportCandidatesAsync(window.SelectedCandidates,cleanupImportBox);
     }
 

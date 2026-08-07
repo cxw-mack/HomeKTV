@@ -75,7 +75,7 @@ public partial class App : System.Windows.Application
                 Shutdown(0);return;
             }
             _automaticBackup=new AutomaticBackupCoordinator(backups,paths,loaded.Settings.AutomaticBackupHours,_logger);_automaticBackup.Start();
-            var viewModel=new MainViewModel(paths,loaded.Settings,_database,songs,queue,importer,httpDownload,transcode,mediaInspection,backups,settingsStore,_player,_playbackCoordinator,_slideshow,new SlideshowConfigurationStore(paths),new SlideshowImageResolver(paths),new SongDeletionService(paths,songs),_server,_logger);
+            var viewModel=new MainViewModel(paths,loaded.Settings,_database,songs,queue,importer,httpDownload,transcode,mediaInspection,backups,settingsStore,_player,_playbackCoordinator,_slideshow,new SlideshowConfigurationStore(paths),new SlideshowImageResolver(paths),new SongDeletionService(paths,songs),new SingerPhotoLookupService(paths),_server,_logger);
             var window=new MainWindow(viewModel);MainWindow=window;ShutdownMode=ShutdownMode.OnMainWindowClose;window.Show();
             if(e.Args.Contains("--smoke-ui",StringComparer.OrdinalIgnoreCase))
             {
@@ -85,7 +85,10 @@ public partial class App : System.Windows.Application
         }
         catch(Exception exception)
         {
-            _logger.Fatal(exception,"HomeKTV startup failed");if(!e.Args.Contains("--smoke-ui",StringComparer.OrdinalIgnoreCase))MessageBox.Show("HomeKTV 启动失败：\n"+exception.Message+"\n\n请查看 Logs 目录中的详细日志。","启动失败",MessageBoxButton.OK,MessageBoxImage.Error);Shutdown(1);
+            _logger.Fatal(exception,"HomeKTV startup failed");
+            var isAutomatedCheck=e.Args.Any(argument=>argument is "--health-check" or "--smoke-ui" or "--server-smoke" or "--playback-smoke" or "--existing-media-switch-smoke" or "--portable-media-smoke");
+            if(!isAutomatedCheck)MessageBox.Show("HomeKTV 启动失败：\n"+exception.Message+"\n\n请查看 Logs 目录中的详细日志。","启动失败",MessageBoxButton.OK,MessageBoxImage.Error);
+            Shutdown(1);
         }
     }
 
@@ -145,7 +148,7 @@ public partial class App : System.Windows.Application
         var sequence=new[]{video,audio,video,fallback};for(var index=0;index<sequence.Length;index++)
         {
             var song=sequence[index];if(index==0){song.MediaType=SongMediaType.VideoWithExternalAudio;song.AccompanimentAudioRelativePath=paths.ToRelative(defaultSource);song.PreferredPlaybackAudio=PreferredPlaybackAudio.Original;}else if(index==2){song.MediaType=SongMediaType.Video;song.PreferredPlaybackAudio=PreferredPlaybackAudio.Original;}
-            var plan=await coordinator.PlayAsync(song);if(song.MediaType is SongMediaType.Video or SongMediaType.VideoWithExternalAudio){if(!plan.ShowVideo||plan.ShowSlideshow)throw new InvalidDataException("MV 场景层级错误。");if(index==0){await Task.Delay(1200);var switchPosition=_player.PositionMs;if(switchPosition<800)throw new InvalidDataException("MV 中途切换烟测未形成有效播放位置。");await coordinator.SwitchAudioAsync(song,PreferredPlaybackAudio.AiAccompaniment);VerifyAudioSwitchDidNotReset(_player,switchPosition,"切换伴奏");if(!_player.IsUsingExternalAudio||_player.IsEmbeddedAudioEnabled)throw CreateAudioStateException(_player,"MV 外部伴奏未启动或原唱未关闭");await VerifyExternalAudioProgressAsync(_player);VerifyExternalAudioDrift(_player,"第一次切换伴奏");var originalPosition=_player.PositionMs;await coordinator.SwitchAudioAsync(song,PreferredPlaybackAudio.Original);VerifyAudioSwitchDidNotReset(_player,originalPosition,"切回原唱");if(_player.IsUsingExternalAudio||!_player.IsEmbeddedAudioEnabled)throw CreateAudioStateException(_player,"MV 切回原唱后没有恢复自带音频");await Task.Delay(1200);var accompanimentPosition=_player.PositionMs;var seekCountBeforeSwitch=_player.ExternalAudioSeekCount;await coordinator.SwitchAudioAsync(song,PreferredPlaybackAudio.AiAccompaniment);VerifyAudioSwitchDidNotReset(_player,accompanimentPosition,"再次切换伴奏");if(_player.ExternalAudioSeekCount!=seekCountBeforeSwitch)throw new InvalidDataException("MV 再次切换伴奏时错误地重置了外部音频游标。");if(!_player.IsUsingExternalAudio||_player.IsEmbeddedAudioEnabled)throw CreateAudioStateException(_player,"MV 再次切换伴奏失败");await VerifyExternalAudioProgressAsync(_player);VerifyExternalAudioDrift(_player,"再次切换伴奏");}if(slideshow.IsRunning||slideshow.CurrentFrame is not null)throw new InvalidDataException("上一首幻灯片覆盖了 MV。");}
+            var plan=await coordinator.PlayAsync(song);if(song.MediaType is SongMediaType.Video or SongMediaType.VideoWithExternalAudio){if(!plan.ShowVideo||plan.ShowSlideshow)throw new InvalidDataException("MV 场景层级错误。");if(index==0){await WaitForPlaybackPositionAsync(_player,800,TimeSpan.FromSeconds(8));var switchPosition=_player.PositionMs;await coordinator.SwitchAudioAsync(song,PreferredPlaybackAudio.AiAccompaniment);VerifyAudioSwitchDidNotReset(_player,switchPosition,"切换伴奏");if(!_player.IsUsingExternalAudio||_player.IsEmbeddedAudioEnabled)throw CreateAudioStateException(_player,"MV 外部伴奏未启动或原唱未关闭");await VerifyExternalAudioProgressAsync(_player);VerifyExternalAudioDrift(_player,"第一次切换伴奏");var originalPosition=_player.PositionMs;await coordinator.SwitchAudioAsync(song,PreferredPlaybackAudio.Original);VerifyAudioSwitchDidNotReset(_player,originalPosition,"切回原唱");if(_player.IsUsingExternalAudio||!_player.IsEmbeddedAudioEnabled)throw CreateAudioStateException(_player,"MV 切回原唱后没有恢复自带音频");await WaitForPlaybackPositionAsync(_player,originalPosition+800,TimeSpan.FromSeconds(8));var accompanimentPosition=_player.PositionMs;var seekCountBeforeSwitch=_player.ExternalAudioSeekCount;await coordinator.SwitchAudioAsync(song,PreferredPlaybackAudio.AiAccompaniment);VerifyAudioSwitchDidNotReset(_player,accompanimentPosition,"再次切换伴奏");if(_player.ExternalAudioSeekCount!=seekCountBeforeSwitch)throw new InvalidDataException("MV 再次切换伴奏时错误地重置了外部音频游标。");if(!_player.IsUsingExternalAudio||_player.IsEmbeddedAudioEnabled)throw CreateAudioStateException(_player,"MV 再次切换伴奏失败");await VerifyExternalAudioProgressAsync(_player);VerifyExternalAudioDrift(_player,"再次切换伴奏");}if(slideshow.IsRunning||slideshow.CurrentFrame is not null)throw new InvalidDataException("上一首幻灯片覆盖了 MV。");}
             else{if(plan.ShowVideo||!plan.ShowSlideshow)throw new InvalidDataException("纯音频场景层级错误。");var configuration=await store.LoadAsync(song.Id);var images=resolver.Resolve(song,configuration);if(song.Id==audio.Id&&images.Count!=3)throw new InvalidDataException("自定义三图幻灯片未完整加载。");if(song.Id==fallback.Id&&images.Count<5)throw new InvalidDataException("系统默认图片回退不足五张。");await slideshow.StartAsync(configuration,images);if(slideshow.CurrentFrame is null)throw new InvalidDataException("幻灯片未产生首帧。");}
             await WaitForPlaybackEndAsync(_player,TimeSpan.FromSeconds(15));coordinator.Stop();await slideshow.StopAsync();if(slideshow.IsRunning||slideshow.CurrentFrame is not null)throw new InvalidDataException("歌曲结束后幻灯片未释放。");logger.Information("Portable mixed playback smoke item {Index}: {Title} / {MediaType}",index+1,song.Title,song.MediaType);
         }
@@ -170,6 +173,17 @@ public partial class App : System.Windows.Application
     private static async Task WaitForPlaybackEndAsync(LibVlcPlaybackService player,TimeSpan timeout)
     {
         var completed=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);EventHandler ended=(_,_)=>completed.TrySetResult();EventHandler<string> failed=(_,message)=>completed.TrySetException(new InvalidDataException(message));player.PlaybackEnded+=ended;player.PlaybackFailed+=failed;try{await completed.Task.WaitAsync(timeout);}finally{player.PlaybackEnded-=ended;player.PlaybackFailed-=failed;}
+    }
+
+    private static async Task WaitForPlaybackPositionAsync(LibVlcPlaybackService player,long minimumPositionMs,TimeSpan timeout)
+    {
+        var deadline=DateTime.UtcNow+timeout;
+        while(player.PositionMs<minimumPositionMs&&DateTime.UtcNow<deadline)
+        {
+            if(!player.IsPlaying)break;
+            await Task.Delay(100);
+        }
+        if(player.PositionMs<minimumPositionMs)throw new InvalidDataException($"MV 中途切换烟测未形成有效播放位置：期望至少 {minimumPositionMs}ms，实际 {player.PositionMs}ms。");
     }
 
     private static async Task VerifyExternalAudioProgressAsync(LibVlcPlaybackService player)

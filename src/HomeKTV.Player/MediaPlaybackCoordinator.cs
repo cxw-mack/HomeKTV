@@ -19,7 +19,11 @@ public sealed class MediaPlaybackCoordinator(PortablePaths paths, LibVlcPlayback
             var selectExternal=song.PreferredPlaybackAudio is PreferredPlaybackAudio.Accompaniment or PreferredPlaybackAudio.AiAccompaniment;
             await player.PlayWithExternalAudioAsync(plan.PrimaryMediaPath,plan.ExternalAudioPath,plan.ExternalAudioOffsetMs,selectExternal,cancellationToken);
         }
-        else await player.PlayAsync(plan.PrimaryMediaPath,cancellationToken);
+        else
+        {
+            await player.PlayAsync(plan.PrimaryMediaPath,cancellationToken);
+            player.SetAccompanimentMode(song.PreferredPlaybackAudio is PreferredPlaybackAudio.Accompaniment or PreferredPlaybackAudio.AiAccompaniment);
+        }
         CurrentPlan=plan;
         return CurrentPlan;
     }
@@ -73,7 +77,7 @@ public sealed class MediaPlaybackCoordinator(PortablePaths paths, LibVlcPlayback
                 var selectedPath = paths.Resolve(selected);
                 if (!File.Exists(selectedPath)) throw new FileNotFoundException("所选音轨尚未生成或已经丢失。", selectedPath);
                 var position = player.PositionMs; var wasPlaying = player.IsPlaying;
-                await player.PlayAsync(selectedPath, cancellationToken); player.Seek(position); if (!wasPlaying) player.Pause();
+                await player.PlayAsync(selectedPath, cancellationToken);player.SetAccompanimentMode(audio is PreferredPlaybackAudio.Accompaniment or PreferredPlaybackAudio.AiAccompaniment);player.Seek(position);if(!wasPlaying)player.Pause();
             }
             song.PreferredPlaybackAudio = audio;
         }

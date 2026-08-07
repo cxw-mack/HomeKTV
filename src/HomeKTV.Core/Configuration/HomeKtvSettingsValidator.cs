@@ -12,6 +12,8 @@ public static class HomeKtvSettingsValidator
         settings.MediaRoot=NormalizeRelative(settings.MediaRoot,"Media");
         settings.PlaybackDisplayIndex=Math.Max(0,settings.PlaybackDisplayIndex);
         settings.DefaultVolume=Math.Clamp(settings.DefaultVolume,0,125);
+        if(settings.SchemaVersion<7&&Math.Abs(settings.AccompanimentVolumeGain-2.5)<.01)settings.AccompanimentVolumeGain=0.4;
+        settings.AccompanimentVolumeGain=Math.Clamp(settings.AccompanimentVolumeGain,0.1,1.5);
         settings.ServerPort=Math.Clamp(settings.ServerPort,1024,65535);
         settings.AdministratorPin=string.IsNullOrWhiteSpace(settings.AdministratorPin)||settings.AdministratorPin.Trim().Length<4?"8888":settings.AdministratorPin.Trim();
         settings.IdleBackgroundRelativePath=NormalizeRelative(settings.IdleBackgroundRelativePath,"Media/Backgrounds");
