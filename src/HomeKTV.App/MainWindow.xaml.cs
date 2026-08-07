@@ -17,8 +17,8 @@ public partial class MainWindow : Window
     public MainWindow(MainViewModel viewModel)
     {
         InitializeComponent();DataContext=_viewModel=viewModel;
-        Loaded+=OnLoaded;Closed+=(_,_)=>_playerWindow?.Close();
-        viewModel.ShowQrRequested+=(_,_)=>ShowQr();viewModel.ConfigureMobileAccessRequested+=(_,_)=>ConfigureMobileAccess();viewModel.ImportRequested+=async (_,_)=>await ImportAsync();viewModel.UrlImportRequested+=(_,_)=>new UrlImportWindow(_viewModel){Owner=this}.ShowDialog();viewModel.TranscodeRequested+=(_,_)=>new TranscodeWindow(_viewModel){Owner=this}.ShowDialog();viewModel.BatchImportRequested+=async (_,_)=>await ScanFolderAsync();viewModel.ImportBoxRequested+=async (_,_)=>await ScanImportBoxAsync(false);viewModel.RestoreRequested+=async (_,_)=>await RestoreAsync();viewModel.OpenPlayerRequested+=(_,_)=>OpenPlayer();viewModel.ClosePlayerRequested+=(_,_)=>_playerWindow?.Close();viewModel.CycleDisplayRequested+=(_,_)=>{OpenPlayer();_playerWindow?.MoveToNextScreen();};viewModel.SlideshowEditorRequested+=(_,_)=>new SlideshowEditorWindow(_viewModel){Owner=this}.ShowDialog();viewModel.DeleteSongRequested+=song=>_ = DeleteSongAsync(song);
+        Loaded+=OnLoaded;Closed+=(_,_)=>{if(_playerWindow is not null){_playerWindow.CloseForShutdown();_playerWindow=null;}};
+        viewModel.ShowQrRequested+=(_,_)=>ShowQr();viewModel.ConfigureMobileAccessRequested+=(_,_)=>ConfigureMobileAccess();viewModel.ImportRequested+=async (_,_)=>await ImportAsync();viewModel.UrlImportRequested+=(_,_)=>new UrlImportWindow(_viewModel){Owner=this}.ShowDialog();viewModel.TranscodeRequested+=(_,_)=>new TranscodeWindow(_viewModel){Owner=this}.ShowDialog();viewModel.BatchImportRequested+=async (_,_)=>await ScanFolderAsync();viewModel.ImportBoxRequested+=async (_,_)=>await ScanImportBoxAsync(false);viewModel.RestoreRequested+=async (_,_)=>await RestoreAsync();viewModel.OpenPlayerRequested+=(_,_)=>OpenPlayer();viewModel.ClosePlayerRequested+=(_,_)=>_playerWindow?.HidePlayer();viewModel.CycleDisplayRequested+=(_,_)=>{OpenPlayer();_playerWindow?.MoveToNextScreen();};viewModel.SlideshowEditorRequested+=(_,_)=>new SlideshowEditorWindow(_viewModel){Owner=this}.ShowDialog();viewModel.DeleteSongRequested+=song=>_ = DeleteSongAsync(song);
     }
 
     private async void OnLoaded(object sender,RoutedEventArgs e)
@@ -32,7 +32,7 @@ public partial class MainWindow : Window
     {
         if(_viewModel.Player is null){MessageBox.Show("LibVLC 未正确加载，大屏播放器暂不可用。请检查 Runtime/LibVLC。","播放器不可用",MessageBoxButton.OK,MessageBoxImage.Warning);return;}
         if(_playerWindow is null||!_playerWindow.IsLoaded){_playerWindow=new PlayerWindow(_viewModel);_playerWindow.Closed+=(_,_)=>_playerWindow=null;_playerWindow.Show();}
-        else{_playerWindow.Activate();}
+        else{_playerWindow.ShowPlayer();}
     }
 
     private void ShowQr()
@@ -75,18 +75,18 @@ public partial class MainWindow : Window
 
     private async Task ScanFolderAsync()
     {
-        var dialog=new OpenFolderDialog{Title="选择包含“歌手 - 歌名”媒体的文件夹",Multiselect=false};
+        var dialog=new OpenFolderDialog{Title="选择乐库根目录（每首歌曲一个文件夹）",Multiselect=false};
         if(dialog.ShowDialog(this)!=true)return;await ConfirmBatchAsync(_viewModel.ScanImportFolder(dialog.FolderName,true),false);
     }
 
     private async Task ScanImportBoxAsync(bool silentWhenEmpty)
     {
-        var candidates=_viewModel.GetImportBoxCandidates();if(candidates.Count==0){if(!silentWhenEmpty)MessageBox.Show("Media/ImportBox 中没有符合“歌手 - 歌名”规则的新媒体。","导入箱",MessageBoxButton.OK,MessageBoxImage.Information);return;}await ConfirmBatchAsync(candidates,true);
+        var candidates=_viewModel.GetImportBoxCandidates();if(candidates.Count==0){if(!silentWhenEmpty)MessageBox.Show("Media/ImportBox 中没有可导入的歌曲文件或歌曲文件夹。","导入箱",MessageBoxButton.OK,MessageBoxImage.Information);return;}await ConfirmBatchAsync(candidates,true);
     }
 
     private async Task ConfirmBatchAsync(IReadOnlyList<MediaImportCandidate> candidates,bool cleanupImportBox)
     {
-        if(candidates.Count==0){MessageBox.Show("没有识别到符合命名规则的视频或音频文件。","批量扫描",MessageBoxButton.OK,MessageBoxImage.Information);return;}
+        if(candidates.Count==0){MessageBox.Show("没有识别到可导入的视频、音频或歌曲文件夹。","批量扫描",MessageBoxButton.OK,MessageBoxImage.Information);return;}
         var window=new BatchImportWindow(candidates){Owner=this};if(window.ShowDialog()==true)await _viewModel.ImportCandidatesAsync(window.SelectedCandidates,cleanupImportBox);
     }
 

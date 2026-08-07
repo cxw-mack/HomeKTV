@@ -38,7 +38,9 @@ public sealed class LibVlcPlaybackService : IPlaybackService
     private long _externalAudioSeekCount;
     private long _lastVlcPositionMs;
     private int _volume = 100;
+    private float _accompanimentGain = 0.4f;
     private int _embeddedAudioTrackId = -1;
+    private bool _embeddedAccompanimentSelected;
     private bool _disposed;
 
     public LibVlcPlaybackService(PortablePaths paths)
@@ -70,8 +72,16 @@ public sealed class LibVlcPlaybackService : IPlaybackService
     public int Volume
     {
         get { lock(_sync)return _volume; }
-        set { lock(_sync){_volume=Math.Clamp(value,0,125);MediaPlayer.Volume=_externalAudioSelected?0:_volume;if(_externalGain is not null)_externalGain.Volume=GetExternalVolume();} }
+        set { lock(_sync){_volume=Math.Clamp(value,0,125);MediaPlayer.Volume=_externalAudioSelected?0:GetEmbeddedVolume();if(_externalGain is not null)_externalGain.Volume=GetExternalVolume();} }
     }
+    public float AccompanimentGain
+    {
+        get{lock(_sync)return _accompanimentGain;}
+        set{lock(_sync){_accompanimentGain=Math.Clamp(value,0.1f,1.5f);if(_externalGain is not null)_externalGain.Volume=GetExternalVolume();if(_embeddedAccompanimentSelected&&!_externalAudioSelected)MediaPlayer.Volume=GetEmbeddedVolume();}}
+    }
+
+    public static float VolumeToExternalGain(int volume,float accompanimentGain=1f)=>Math.Clamp(volume,0,125)/100f*Math.Clamp(accompanimentGain,0.1f,1.5f);
+    public static int CalculateAccompanimentVolume(int volume,float accompanimentGain)=>Math.Clamp((int)Math.Round(Math.Clamp(volume,0,125)*Math.Clamp(accompanimentGain,0.1f,1.5f)),0,200);
 
     public Task PlayAsync(string absoluteMediaPath, CancellationToken cancellationToken = default)
     {
@@ -168,7 +178,7 @@ public sealed class LibVlcPlaybackService : IPlaybackService
         }
     }
 
-    public void UseEmbeddedAudio() { lock (_sync) SelectExternalAudioCore(false); }
+    public void UseEmbeddedAudio() { lock (_sync){_embeddedAccompanimentSelected=false;SelectExternalAudioCore(false);} }
     public void Pause() { lock (_sync) { var position=GetTimelinePositionCore();if (MediaPlayer.IsPlaying) MediaPlayer.Pause();SetTimelinePositionCore(position,false);if (_externalReader is not null&&_externalOutput?.PlaybackState==PlaybackState.Playing)_externalOutput.Pause(); } }
     public void Resume() { lock (_sync) { if (!MediaPlayer.IsPlaying) MediaPlayer.Play();SetTimelinePositionCore(GetTimelinePositionCore(),true);if (_externalReader is not null&&_externalOutput?.PlaybackState!=PlaybackState.Playing) { ApplyExternalPosition(GetTimelinePositionCore()); _externalOutput?.Play(); } } }
     public void Stop() { lock (_sync) StopCore(); }
@@ -182,7 +192,9 @@ public sealed class LibVlcPlaybackService : IPlaybackService
         MediaPlayer.SetOutputDevice(deviceId, null); return true;
     }
 
-    public void SetAudioTrack(int trackId) => MediaPlayer.SetAudioTrack(trackId);
+    public void SetAudioTrack(int trackId)=>SetAudioTrack(trackId,false);
+    public void SetAudioTrack(int trackId,bool isAccompaniment){lock(_sync){MediaPlayer.SetAudioTrack(trackId);_embeddedAccompanimentSelected=isAccompaniment;if(!_externalAudioSelected)MediaPlayer.Volume=GetEmbeddedVolume();}}
+    public void SetAccompanimentMode(bool enabled){lock(_sync){_embeddedAccompanimentSelected=enabled;if(!_externalAudioSelected)MediaPlayer.Volume=GetEmbeddedVolume();}}
     public void SetAudioChannel(AudioChannelMode channel)
     {
         var value = channel switch { AudioChannelMode.Left => AudioOutputChannel.Left, AudioChannelMode.Right => AudioOutputChannel.Right, _ => AudioOutputChannel.Stereo };
@@ -269,14 +281,15 @@ public sealed class LibVlcPlaybackService : IPlaybackService
             }
         }
     }
-    private float GetExternalVolume()=>Math.Clamp(_volume/100f,0,1);
+    private float GetExternalVolume()=>VolumeToExternalGain(_volume,_accompanimentGain);
+    private int GetEmbeddedVolume()=>_embeddedAccompanimentSelected?CalculateAccompanimentVolume(_volume,_accompanimentGain):_volume;
     private void StartExternalAudioCore(string path,long positionMs,float volume,bool startOutput=true)
     {
         try
         {
             _externalReader=new MediaFoundationReader(path);
-            _externalGain=new VolumeSampleProvider(_externalReader.ToSampleProvider()){Volume=Math.Clamp(volume,0,1)};
-            _externalFade=new FadeInOutSampleProvider(_externalGain,false);
+            _externalGain=new VolumeSampleProvider(_externalReader.ToSampleProvider()){Volume=Math.Max(0,volume)};
+            _externalFade=new FadeInOutSampleProvider(new SoftLimiterSampleProvider(_externalGain),false);
             // WASAPI event mode is materially more stable than WinMM/WaveOutEvent
             // when the second audio stream is decoding FLAC beside VLC video.
             _externalOutput=new WasapiOut(AudioClientShareMode.Shared,true,ExternalOutputLatencyMs);
@@ -326,11 +339,11 @@ public sealed class LibVlcPlaybackService : IPlaybackService
     }
     private void RestoreEmbeddedAudioCore()
     {
-        MediaPlayer.Mute=false;MediaPlayer.Volume=_volume;
+        MediaPlayer.Mute=false;MediaPlayer.Volume=GetEmbeddedVolume();
         if(_embeddedAudioTrackId>=0&&MediaPlayer.AudioTrack<0&&!MediaPlayer.SetAudioTrack(_embeddedAudioTrackId))throw new InvalidOperationException("VLC 无法恢复 MV 原唱音轨。");
     }
     private void RecoverEmbeddedAudioCore() { DisposeExternalAudioCore();RestoreEmbeddedAudioCore(); }
-    private void StopCore() { MediaPlayer.Stop();SetTimelinePositionCore(0,false);DisposeExternalAudioCore();_currentMedia?.Dispose();_currentMedia = null;_embeddedAudioTrackId=-1;MediaPlayer.Mute=false;MediaPlayer.Volume=_volume; }
+    private void StopCore() { MediaPlayer.Stop();SetTimelinePositionCore(0,false);DisposeExternalAudioCore();_currentMedia?.Dispose();_currentMedia = null;_embeddedAudioTrackId=-1;_embeddedAccompanimentSelected=false;MediaPlayer.Mute=false;MediaPlayer.Volume=_volume; }
     private static void EnsureFile(string path) { if (!File.Exists(path)) throw new FileNotFoundException("找不到媒体文件，请在媒体检查页重新定位或导入。", path); }
 
     private static string? FindNativeDirectory(PortablePaths paths)
@@ -343,5 +356,24 @@ public sealed class LibVlcPlaybackService : IPlaybackService
     {
         if (_disposed) return; _disposed = true; _syncTimer.Dispose();
         lock (_sync) { StopCore(); MediaPlayer.Dispose(); _libVlc.Dispose(); }
+    }
+
+    private sealed class SoftLimiterSampleProvider(ISampleProvider source):ISampleProvider
+    {
+        public WaveFormat WaveFormat=>source.WaveFormat;
+        public int Read(float[] buffer,int offset,int count)
+        {
+            var read=source.Read(buffer,offset,count);
+            for(var index=offset;index<offset+read;index++)buffer[index]=Limit(buffer[index]);
+            return read;
+        }
+        private static float Limit(float sample)
+        {
+            const float threshold=.92f;
+            var absolute=Math.Abs(sample);
+            if(absolute<=threshold)return sample;
+            var limited=threshold+(1-threshold)*(1-MathF.Exp(-(absolute-threshold)/(1-threshold)));
+            return MathF.CopySign(Math.Min(limited,.999f),sample);
+        }
     }
 }

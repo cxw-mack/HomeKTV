@@ -2,155 +2,365 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:HomeKTV.App"
-        Title="HomeKTV 家庭点歌台" Width="1440" Height="900" MinWidth="1100" MinHeight="700"
-        WindowStartupLocation="CenterScreen" Background="{StaticResource BgBrush}">
-    <Window.Resources><local:PortableImageConverter x:Key="PortableImage"/></Window.Resources>
+        Title="HomeKTV 家庭点歌台"
+        Width="1360" Height="820" MinWidth="1120" MinHeight="700"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource BgBrush}">
+    <Window.Resources>
+        <local:PortableImageConverter x:Key="PortableImage"/>
+
+        <Style x:Key="SectionTitle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="FontSize" Value="26"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+        </Style>
+        <Style x:Key="SectionSubtitle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource MutedBrush}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Margin" Value="0,5,0,0"/>
+        </Style>
+        <Style x:Key="NavItemStyle" TargetType="ListBoxItem">
+            <Setter Property="Foreground" Value="#B8BEC4"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="0,3"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="item" Background="{TemplateBinding Background}" CornerRadius="6" Padding="15,12" BorderBrush="Transparent" BorderThickness="1">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="item" Property="Background" Value="#8B5CF6"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="item" Property="Background" Value="#2B3035"/></Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="item" Property="BorderBrush" Value="White"/></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="FlatListItem" TargetType="ListBoxItem">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="0,0,0,7"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="row" Background="{TemplateBinding Background}" CornerRadius="6" BorderBrush="Transparent" BorderThickness="1">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="row" Property="Background" Value="#262B30"/></Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="row" Property="BorderBrush" Value="White"/></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <DataTemplate x:Key="SongRowTemplate">
+            <Grid Height="66" Margin="8,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="58"/><ColumnDefinition Width="*"/><ColumnDefinition Width="88"/>
+                    <ColumnDefinition Width="64"/><ColumnDefinition Width="78"/><ColumnDefinition Width="64"/>
+                </Grid.ColumnDefinitions>
+                <Border Width="50" Height="50" CornerRadius="5" Background="#30353A" ClipToBounds="True" VerticalAlignment="Center">
+                    <Grid>
+                                <TextBlock Text="♪" FontSize="21" Foreground="#BFA7FF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <Image Source="{Binding CoverRelativePath,Converter={StaticResource PortableImage}}" Stretch="UniformToFill"/>
+                    </Grid>
+                </Border>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0">
+                    <TextBlock Text="{Binding Title}" FontSize="16" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Text="{Binding ArtistDisplayName}" Foreground="{StaticResource MutedBrush}" FontSize="12" TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
+                <Border Grid.Column="2" Background="#23272B" CornerRadius="4" Margin="8,15">
+                    <TextBlock Text="{Binding Language}" Foreground="#C1C7CD" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="12"/>
+                </Border>
+                <Button Grid.Column="3" Style="{StaticResource IconButton}" Content="♡" FontFamily="Microsoft YaHei UI" FontSize="19" ToolTip="收藏或取消收藏"
+                        Command="{Binding DataContext.ToggleFavoriteCommand,RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}"/>
+                <Button Grid.Column="4" Content="点歌" Command="{Binding DataContext.EnqueueCommand,RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}"/>
+                <Button Grid.Column="5" Style="{StaticResource IconButton}" Content="×" FontFamily="Microsoft YaHei UI" FontSize="21" ToolTip="彻底删除歌曲"
+                        Command="{Binding DataContext.RequestSongDeletionCommand,RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}"/>
+            </Grid>
+        </DataTemplate>
+
+        <DataTemplate x:Key="QueueRowTemplate">
+            <Grid Height="68" Margin="10,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="42"/><ColumnDefinition Width="*"/><ColumnDefinition Width="100"/><ColumnDefinition Width="72"/>
+                    <ColumnDefinition Width="54"/><ColumnDefinition Width="54"/><ColumnDefinition Width="68"/><ColumnDefinition Width="54"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{Binding Position}" FontSize="18" FontWeight="Bold" Foreground="#BFA7FF" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0">
+                    <TextBlock Text="{Binding Song.Title}" FontSize="16" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Foreground="{StaticResource MutedBrush}" FontSize="12"><Run Text="{Binding Song.ArtistDisplayName}"/><Run Text="  ·  "/><Run Text="{Binding RequestedBy}"/></TextBlock>
+                </StackPanel>
+                <TextBlock Grid.Column="2" Text="{Binding State}" Foreground="#2DD4BF" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                <Button Grid.Column="3" Style="{StaticResource GhostButton}" Content="置顶" Command="{Binding DataContext.TogglePinCommand,RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}"/>
+                <Button Grid.Column="4" Style="{StaticResource IconButton}" Content="↑" ToolTip="上移" Command="{Binding DataContext.MoveQueueUpCommand,RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}"/>
+                <Button Grid.Column="5" Style="{StaticResource IconButton}" Content="↓" ToolTip="下移" Command="{Binding DataContext.MoveQueueDownCommand,RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}"/>
+                <Button Grid.Column="6" Style="{StaticResource GhostButton}" Content="移除" Command="{Binding DataContext.DeleteQueueCommand,RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}"/>
+            </Grid>
+        </DataTemplate>
+    </Window.Resources>
+
     <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="*" />
-            <RowDefinition Height="94" />
-        </Grid.RowDefinitions>
+        <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="104"/></Grid.RowDefinitions>
         <Grid>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="220" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-            <Border Background="#0F1220" BorderBrush="#24283A" BorderThickness="0,0,1,0">
-                <Grid Margin="18,24">
-                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                    <StackPanel Orientation="Horizontal">
-                        <Border Width="48" Height="48" CornerRadius="16" Background="{StaticResource AccentBrush}">
-                            <TextBlock Text="H" FontSize="26" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <StackPanel Margin="12,3,0,0"><TextBlock Text="HomeKTV" FontSize="19" FontWeight="Bold"/><TextBlock Text="家庭欢唱中心" Foreground="{StaticResource MutedBrush}" FontSize="11"/></StackPanel>
+            <Grid.ColumnDefinitions><ColumnDefinition Width="196"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+
+            <Border Background="#120F18" BorderBrush="#33283F" BorderThickness="0,0,1,0">
+                <Grid Margin="15,20,15,14">
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                    <StackPanel Margin="8,0,8,24">
+                        <StackPanel Orientation="Horizontal">
+                            <Border Width="42" Height="42" CornerRadius="6" Background="{StaticResource AccentBrush}">
+                                <TextBlock Text="H" FontSize="23" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <StackPanel Margin="10,2,0,0">
+                                <TextBlock Text="HomeKTV" FontSize="18" FontWeight="Bold"/>
+                                <TextBlock Text="家庭欢唱中心" Foreground="{StaticResource MutedBrush}" FontSize="10"/>
+                            </StackPanel>
+                        </StackPanel>
                     </StackPanel>
+                    <ListBox x:Name="MainNavigation" Grid.Row="1" SelectedIndex="0" Background="Transparent" BorderThickness="0" ItemContainerStyle="{StaticResource NavItemStyle}">
+                        <ListBoxItem><StackPanel Orientation="Horizontal"><TextBlock Text="⌂" FontSize="21" Width="34"/><TextBlock Text="推荐" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/></StackPanel></ListBoxItem>
+                        <ListBoxItem><StackPanel Orientation="Horizontal"><TextBlock Text="♬" FontSize="20" Width="34"/><TextBlock Text="歌手" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/></StackPanel></ListBoxItem>
+                        <ListBoxItem><StackPanel Orientation="Horizontal"><TextBlock Text="▦" FontSize="20" Width="34"/><TextBlock Text="分类" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/></StackPanel></ListBoxItem>
+                        <ListBoxItem><StackPanel Orientation="Horizontal"><TextBlock Text="⌕" FontSize="22" Width="34"/><TextBlock Text="搜索" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/></StackPanel></ListBoxItem>
+                        <ListBoxItem><StackPanel Orientation="Horizontal"><TextBlock Text="≡" FontSize="21" Width="34"/><TextBlock Text="已点" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/></StackPanel></ListBoxItem>
+                        <ListBoxItem><StackPanel Orientation="Horizontal"><TextBlock Text="⚙" FontSize="18" Width="34"/><TextBlock Text="管理" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/></StackPanel></ListBoxItem>
+                    </ListBox>
                     <StackPanel Grid.Row="2">
-                        <Border Background="#1A1D2C" CornerRadius="14" Padding="13" Margin="0,8">
-                            <StackPanel><TextBlock Text="手机点歌地址" Foreground="{StaticResource MutedBrush}" FontSize="11"/><TextBlock Text="{Binding ServerAddress}" TextWrapping="Wrap" Margin="0,6,0,0" FontSize="12"/></StackPanel>
+                        <Border Background="#211A2A" CornerRadius="6" Padding="12" Margin="0,0,0,8">
+                            <StackPanel><TextBlock Text="手机点歌" Foreground="{StaticResource MutedBrush}" FontSize="11"/><TextBlock Text="{Binding ServerAddress}" FontSize="11" Margin="0,5,0,0" TextWrapping="Wrap"/></StackPanel>
                         </Border>
-                        <Button Content="打开手机点歌二维码" Command="{Binding ShowQrCommand}"/>
-                        <TextBlock Text="数据均保存在当前便携目录" Foreground="#606579" FontSize="10" Margin="8,9"/>
+                        <Button Style="{StaticResource GhostButton}" Content="显示点歌二维码" Command="{Binding ShowQrCommand}"/>
                     </StackPanel>
                 </Grid>
             </Border>
-            <Grid Grid.Column="1" Margin="24,18,24,12">
-                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                <Grid>
-                    <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                    <StackPanel><TextBlock Text="家庭点歌台" FontSize="27" FontWeight="Bold"/><TextBlock Text="搜歌、排队、播放和设备状态都在这里" Foreground="{StaticResource MutedBrush}" Margin="0,5,0,0"/></StackPanel>
-                    <StackPanel Grid.Column="1" Orientation="Horizontal"><Button Style="{StaticResource GhostButton}" Content="打开大屏" Command="{Binding OpenPlayerCommand}"/><Button Style="{StaticResource GhostButton}" Content="切换屏幕" Command="{Binding CycleDisplayCommand}"/><Button Style="{StaticResource GhostButton}" Content="关闭大屏" Command="{Binding ClosePlayerCommand}"/><Button Content="导入歌曲" Command="{Binding ImportCommand}"/></StackPanel>
-                </Grid>
-                <TabControl Grid.Row="1" Margin="0,16,0,0" Background="Transparent" BorderThickness="0">
-                    <TabItem Header="首页 / 搜索">
-                        <Grid Margin="4,14,4,0">
-                            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
+
+            <Grid Grid.Column="1">
+                <Grid.RowDefinitions><RowDefinition Height="66"/><RowDefinition Height="*"/><RowDefinition Height="28"/></Grid.RowDefinitions>
+                <Border BorderBrush="#2C2335" BorderThickness="0,0,0,1" Padding="24,10">
+                    <Grid>
+                        <TextBlock Text="HomeKTV" FontSize="21" FontWeight="Bold" VerticalAlignment="Center"/>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button Style="{StaticResource GhostButton}" Content="打开大屏" Command="{Binding OpenPlayerCommand}"/>
+                            <Button Style="{StaticResource GhostButton}" Content="切换屏幕" Command="{Binding CycleDisplayCommand}"/>
+                            <Button Style="{StaticResource GhostButton}" Content="关闭大屏" Command="{Binding ClosePlayerCommand}"/>
+                            <Button Content="导入歌曲" Command="{Binding ImportCommand}"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <TabControl Grid.Row="1" SelectedIndex="{Binding SelectedIndex,ElementName=MainNavigation}" Background="Transparent" BorderThickness="0" Padding="0">
+                    <TabControl.ItemContainerStyle><Style TargetType="TabItem"><Setter Property="Visibility" Value="Collapsed"/></Style></TabControl.ItemContainerStyle>
+
+                    <TabItem Header="推荐">
+                        <Grid Margin="24,18,24,10">
+                            <Grid.RowDefinitions><RowDefinition Height="210"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
                             <Grid>
-                                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="150"/><ColumnDefinition Width="110"/></Grid.ColumnDefinitions>
-                                <TextBox Text="{Binding SearchText,UpdateSourceTrigger=PropertyChanged}" ToolTip="支持歌名、歌手、拼音全拼、首字母和别名"/>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="2*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                <Border Background="#211B29" CornerRadius="6" ClipToBounds="True" Margin="0,0,9,0">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="230"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                        <Border Background="#30263D"><Grid><TextBlock Text="♪" FontSize="72" Foreground="#BFA7FF" HorizontalAlignment="Center" VerticalAlignment="Center"/><Image Source="{Binding CurrentCoverRelativePath,Converter={StaticResource PortableImage}}" Stretch="UniformToFill"/></Grid></Border>
+                                        <StackPanel Grid.Column="1" Margin="25" VerticalAlignment="Center">
+                                            <TextBlock Text="正在播放" Foreground="#BFA7FF" FontWeight="Bold"/>
+                                            <TextBlock Text="{Binding CurrentTitle}" FontSize="30" FontWeight="Bold" Margin="0,8,0,0" TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Text="{Binding CurrentArtist}" Foreground="#C2C8CE" FontSize="15" Margin="0,7,0,0"/>
+                                            <TextBlock Foreground="{StaticResource MutedBrush}" Margin="0,18,0,0"><Run Text="下一首  "/><Run Text="{Binding NextTitle}"/></TextBlock>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                                <Border Grid.Column="1" Background="#211A31" CornerRadius="6" Padding="22" Margin="9,0,0,0">
+                                    <Grid>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="手机扫码点歌" FontSize="22" FontWeight="Bold"/>
+                                            <TextBlock Text="{Binding ServerAddress}" Foreground="#C8B5FF" FontSize="14" Margin="0,10,0,18" TextWrapping="Wrap"/>
+                                            <Button Content="打开二维码" Command="{Binding ShowQrCommand}" HorizontalAlignment="Left"/>
+                                        </StackPanel>
+                                        <TextBlock Text="▦" FontSize="66" Foreground="#A579FF" Opacity="0.28" HorizontalAlignment="Right" VerticalAlignment="Bottom"/>
+                                    </Grid>
+                                </Border>
+                            </Grid>
+                            <Grid Grid.Row="1" Margin="0,18,0,10">
+                                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <TextBlock Text="热门推荐" Style="{StaticResource SectionTitle}"/>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <Button Style="{StaticResource GhostButton}" Content="热歌榜" Command="{Binding BrowsePopularCommand}"/>
+                                    <Button Style="{StaticResource GhostButton}" Content="新歌" Command="{Binding BrowseRecentImportedCommand}"/>
+                                    <Button Style="{StaticResource GhostButton}" Content="最近播放" Command="{Binding BrowseRecentPlayedCommand}"/>
+                                    <Button Style="{StaticResource GhostButton}" Content="收藏" Command="{Binding BrowseFavoritesCommand}"/>
+                                </StackPanel>
+                            </Grid>
+                            <ListBox Grid.Row="2" ItemsSource="{Binding Songs}" ItemTemplate="{StaticResource SongRowTemplate}" ItemContainerStyle="{StaticResource FlatListItem}" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled"/>
+                        </Grid>
+                    </TabItem>
+
+                    <TabItem Header="歌手">
+                        <Grid Margin="24,18,24,10">
+                            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                            <Grid>
+                                <StackPanel><TextBlock Text="歌手点歌" Style="{StaticResource SectionTitle}"/><TextBlock Text="按地区、类型或姓名首字母查找歌手" Style="{StaticResource SectionSubtitle}"/></StackPanel>
+                                <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center">
+                                    <Button Content="联网补全头像" Command="{Binding LookupSingerPhotosCommand}" IsEnabled="{Binding IsSingerPhotoLookupRunning,Converter={StaticResource InverseBoolean}}"/>
+                                    <TextBlock Text="{Binding SingerPhotoLookupStatus}" Foreground="{StaticResource MutedBrush}" FontSize="10" HorizontalAlignment="Right" Margin="0,2,4,0"/>
+                                </StackPanel>
+                            </Grid>
+                            <Grid Grid.Row="1" Margin="0,18,0,0">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="430"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                <Border Background="#15191C" CornerRadius="6" Padding="14" Margin="0,0,10,0">
+                                    <Grid>
+                                        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                                        <ItemsControl ItemsSource="{Binding SingerFilters}">
+                                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate><DataTemplate><Button Style="{StaticResource GhostButton}" Content="{Binding Title}" Command="{Binding DataContext.SelectSingerFilterCommand,RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Padding="12,6" MinHeight="36"/></DataTemplate></ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <ItemsControl Grid.Row="1" ItemsSource="{Binding SingerInitials}" Margin="0,10">
+                                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate><DataTemplate><Button Style="{StaticResource GhostButton}" Content="{Binding}" Command="{Binding DataContext.SelectSingerInitialCommand,RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Width="37" MinWidth="37" Height="34" MinHeight="34" Padding="0" FontSize="12"/></DataTemplate></ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <ListBox Grid.Row="2" ItemsSource="{Binding SingerGroups}" Background="Transparent" BorderThickness="0" ItemContainerStyle="{StaticResource FlatListItem}">
+                                            <ListBox.ItemTemplate><DataTemplate>
+                                                <Button Style="{StaticResource GhostButton}" Background="#241D2D" HorizontalContentAlignment="Stretch" Padding="9" Margin="0" Command="{Binding DataContext.SelectSingerCommand,RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}">
+                                                    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="54"/><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                                        <Border Width="46" Height="46" CornerRadius="23" Background="#3A2F4A" ClipToBounds="True"><Grid><TextBlock Text="♬" Foreground="#BFA7FF" HorizontalAlignment="Center" VerticalAlignment="Center"/><Image Source="{Binding CoverRelativePath,Converter={StaticResource PortableImage}}" Stretch="UniformToFill"/></Grid></Border>
+                                                        <StackPanel Grid.Column="1" Margin="9,0" VerticalAlignment="Center"><TextBlock Text="{Binding Name}" FontSize="15" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Language}" FontSize="11" Foreground="{StaticResource MutedBrush}"/></StackPanel>
+                                                        <TextBlock Grid.Column="2" Text="{Binding SongCount,StringFormat={}{0} 首}" Foreground="#BFA7FF" VerticalAlignment="Center"/>
+                                                    </Grid>
+                                                </Button>
+                                            </DataTemplate></ListBox.ItemTemplate>
+                                        </ListBox>
+                                    </Grid>
+                                </Border>
+                                <Grid Grid.Column="1" Margin="10,0,0,0">
+                                    <Grid.RowDefinitions><RowDefinition Height="52"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                                    <Grid><TextBlock Text="{Binding SelectedSingerName}" FontSize="22" FontWeight="Bold" VerticalAlignment="Center"/><TextBlock Text="{Binding Songs.Count,StringFormat={}{0} 首}" Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Right" VerticalAlignment="Center"/></Grid>
+                                    <ListBox Grid.Row="1" ItemsSource="{Binding Songs}" ItemTemplate="{StaticResource SongRowTemplate}" ItemContainerStyle="{StaticResource FlatListItem}" Background="Transparent" BorderThickness="0"/>
+                                </Grid>
+                            </Grid>
+                        </Grid>
+                    </TabItem>
+
+                    <TabItem Header="分类">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel Margin="24,18,24,12">
+                                <TextBlock Text="歌曲分类" Style="{StaticResource SectionTitle}"/>
+                                <TextBlock Text="按语言、媒体类型和歌库状态快速筛选" Style="{StaticResource SectionSubtitle}"/>
+                                <ItemsControl ItemsSource="{Binding LibraryCategories}" Margin="0,18,0,8">
+                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate><DataTemplate>
+                                        <Button Width="225" Height="116" Margin="0,0,12,12" Padding="0" Background="#241D2D" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" Command="{Binding DataContext.SelectCategoryCommand,RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}">
+                                            <Grid Margin="18"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="58"/></Grid.ColumnDefinitions>
+                                                <StackPanel VerticalAlignment="Center"><TextBlock Text="{Binding Title}" FontSize="19" FontWeight="Bold"/><TextBlock Text="{Binding SongCount,StringFormat={}{0} 首歌曲}" Foreground="#C1C7CD" Margin="0,7,0,0"/></StackPanel>
+                                                <Border Grid.Column="1" Width="52" Height="52" CornerRadius="6" Background="{Binding AccentColor}"><TextBlock Text="{Binding Glyph}" FontSize="18" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                                            </Grid>
+                                        </Button>
+                                    </DataTemplate></ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <Grid Margin="0,8,0,10"><TextBlock Text="{Binding LibraryViewTitle}" FontSize="22" FontWeight="Bold"/><TextBlock Text="{Binding Songs.Count,StringFormat={}{0} 首}" HorizontalAlignment="Right" Foreground="{StaticResource MutedBrush}"/></Grid>
+                                <ListBox Height="330" ItemsSource="{Binding Songs}" ItemTemplate="{StaticResource SongRowTemplate}" ItemContainerStyle="{StaticResource FlatListItem}" Background="Transparent" BorderThickness="0"/>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
+
+                    <TabItem Header="搜索">
+                        <Grid Margin="24,18,24,10">
+                            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                            <StackPanel><TextBlock Text="搜索歌曲" Style="{StaticResource SectionTitle}"/><TextBlock Text="支持歌名、歌手、拼音全拼、首字母和别名" Style="{StaticResource SectionSubtitle}"/></StackPanel>
+                            <Grid Grid.Row="1" Margin="0,18,0,14">
+                                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="150"/><ColumnDefinition Width="100"/></Grid.ColumnDefinitions>
+                                <TextBox Text="{Binding SearchText,UpdateSourceTrigger=PropertyChanged}" FontSize="16"/>
                                 <ComboBox Grid.Column="1" Margin="10,0" ItemsSource="{Binding Languages}" SelectedItem="{Binding SelectedLanguage}"/>
                                 <Button Grid.Column="2" Content="搜索" Command="{Binding SearchCommand}"/>
                             </Grid>
-                            <Grid Grid.Row="1" Margin="2,12,2,8"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel Orientation="Horizontal"><Button Style="{StaticResource GhostButton}" Content="热门" Command="{Binding BrowsePopularCommand}"/><Button Style="{StaticResource GhostButton}" Content="最近导入" Command="{Binding BrowseRecentImportedCommand}"/><Button Style="{StaticResource GhostButton}" Content="最近播放" Command="{Binding BrowseRecentPlayedCommand}"/><Button Style="{StaticResource GhostButton}" Content="收藏" Command="{Binding BrowseFavoritesCommand}"/></StackPanel><StackPanel Grid.Column="1" VerticalAlignment="Center"><TextBlock Text="{Binding LibraryViewTitle}" FontWeight="SemiBold" HorizontalAlignment="Right"/><TextBlock Text="{Binding Songs.Count,StringFormat={}{0} 首}" Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Right"/></StackPanel></Grid>
-                            <ListBox Grid.Row="2" ItemsSource="{Binding Songs}" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                                <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch"/><Setter Property="Background" Value="Transparent"/><Setter Property="Margin" Value="0,0,0,7"/></Style></ListBox.ItemContainerStyle>
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border Background="{StaticResource PanelBrush}" CornerRadius="15" Padding="13">
-                                            <Grid>
-                                                <Grid.ColumnDefinitions><ColumnDefinition Width="54"/><ColumnDefinition/><ColumnDefinition Width="90"/><ColumnDefinition Width="58"/><ColumnDefinition Width="86"/><ColumnDefinition Width="72"/></Grid.ColumnDefinitions>
-                                                <Border Width="48" Height="48" CornerRadius="13" Background="#2C2744" ClipToBounds="True"><Grid><TextBlock Text="♫" FontSize="20" Foreground="#D3C3FF" HorizontalAlignment="Center" VerticalAlignment="Center"/><Image Source="{Binding CoverRelativePath,Converter={StaticResource PortableImage}}" Stretch="UniformToFill"/></Grid></Border>
-                                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0"><TextBlock Text="{Binding Title}" FontSize="15" FontWeight="SemiBold"/><TextBlock Text="{Binding ArtistDisplayName}" Foreground="{StaticResource MutedBrush}" FontSize="12"/></StackPanel>
-                                                <Border Grid.Column="2" CornerRadius="10" Background="#232638" Margin="6"><TextBlock Text="{Binding Language}" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#BABED0"/></Border>
-                                                <Button Grid.Column="3" Style="{StaticResource GhostButton}" Content="♥" ToolTip="收藏/取消收藏" Command="{Binding DataContext.ToggleFavoriteCommand,RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}"/><Button Grid.Column="4" Content="点歌" Command="{Binding DataContext.EnqueueCommand,RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}"/><Button Grid.Column="5" Style="{StaticResource GhostButton}" Content="删除" ToolTip="彻底删除歌曲和全部相关数据" Command="{Binding DataContext.RequestSongDeletionCommand,RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}"/>
-                                            </Grid>
-                                        </Border>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
-                        </Grid>
-                    </TabItem>
-                    <TabItem Header="已点队列">
-                        <Grid Margin="4,14,4,0">
-                            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
-                            <Grid><TextBlock Text="已点歌曲" FontSize="20" FontWeight="Bold"/><Button HorizontalAlignment="Right" Style="{StaticResource GhostButton}" Content="清空待播" Command="{Binding ClearQueueCommand}"/></Grid>
-                            <ListBox Grid.Row="1" Margin="0,12,0,0" ItemsSource="{Binding QueueItems}" Background="Transparent" BorderThickness="0">
-                                <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch"/><Setter Property="Margin" Value="0,0,0,7"/></Style></ListBox.ItemContainerStyle>
-                                <ListBox.ItemTemplate><DataTemplate><Border Background="{StaticResource PanelBrush}" CornerRadius="15" Padding="12"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="52"/><ColumnDefinition/><ColumnDefinition Width="140"/><ColumnDefinition Width="58"/><ColumnDefinition Width="58"/><ColumnDefinition Width="58"/><ColumnDefinition Width="72"/></Grid.ColumnDefinitions><TextBlock Text="{Binding Position}" FontSize="18" Foreground="#696F86" HorizontalAlignment="Center" VerticalAlignment="Center"/><StackPanel Grid.Column="1"><TextBlock Text="{Binding Song.Title}" FontSize="15"/><TextBlock Text="{Binding Song.ArtistDisplayName}" Foreground="{StaticResource MutedBrush}"/></StackPanel><TextBlock Grid.Column="2" Text="{Binding RequestedBy,StringFormat={}点歌人：{0}}" Foreground="#B4A7E8" VerticalAlignment="Center"/><Button Grid.Column="3" Style="{StaticResource GhostButton}" Content="↑" ToolTip="上移" Command="{Binding DataContext.MoveQueueUpCommand,RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}"/><Button Grid.Column="4" Style="{StaticResource GhostButton}" Content="↓" ToolTip="下移" Command="{Binding DataContext.MoveQueueDownCommand,RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}"/><Button Grid.Column="5" Style="{StaticResource GhostButton}" Content="顶" ToolTip="置顶/取消置顶" Command="{Binding DataContext.TogglePinCommand,RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}"/><Button Grid.Column="6" Style="{StaticResource GhostButton}" Content="删除" Command="{Binding DataContext.DeleteQueueCommand,RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}"/></Grid></Border></DataTemplate></ListBox.ItemTemplate>
-                            </ListBox>
-                        </Grid>
-                    </TabItem>
-                    <TabItem Header="导入 / 媒体">
-                        <Grid Margin="6,18"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
-                            <Border Background="{StaticResource PanelBrush}" CornerRadius="20" Padding="28" Margin="0,0,9,0"><StackPanel><TextBlock Text="歌曲导入" FontSize="23" FontWeight="Bold"/><TextBlock Text="单曲导入可同时选择歌曲媒体与独立伴奏，并自动匹配同名 LRC 和封面。" TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" LineHeight="23" Margin="0,12,0,20"/><Button Content="导入歌曲与伴奏" Command="{Binding ImportCommand}"/><Button Style="{StaticResource GhostButton}" Content="HTTP/HTTPS 合法直链" Command="{Binding UrlImportCommand}"/><Button Style="{StaticResource GhostButton}" Content="FFmpeg 转码 H.264/AAC" Command="{Binding TranscodeCommand}"/><Button Style="{StaticResource GhostButton}" Content="扫描本地文件夹" Command="{Binding BatchImportCommand}"/><Button Style="{StaticResource GhostButton}" Content="扫描 Media/ImportBox" Command="{Binding ScanImportBoxCommand}"/><TextBlock Text="支持 MP4、MKV、MOV、MP3、FLAC、WAV、M4A 等歌曲与伴奏文件。" Foreground="#787E94" TextWrapping="Wrap" Margin="0,18,0,0"/></StackPanel></Border>
-                            <Border Grid.Column="1" Background="{StaticResource PanelBrush}" CornerRadius="20" Padding="24" Margin="9,0,0,0"><Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions><TextBlock Text="媒体健康检查" FontSize="23" FontWeight="Bold"/><Grid Grid.Row="1" Margin="0,12"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="{Binding AvailableSongCount,StringFormat={}可用媒体：{0} 首}" FontSize="15"/><TextBlock Text="{Binding SongCount,StringFormat={}歌曲总数：{0} 首}" Foreground="{StaticResource MutedBrush}"/></StackPanel><Button Grid.Column="1" Content="FFprobe 深度检查" Command="{Binding InspectMediaCommand}"/></Grid><ListBox Grid.Row="2" ItemsSource="{Binding MediaInspectionResults}" Background="Transparent" BorderThickness="0"><ListBox.ItemTemplate><DataTemplate><Border Background="#1C2031" CornerRadius="10" Padding="10" Margin="0,3"><Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="95"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="{Binding Title}"/><TextBlock Text="{Binding Details}" Foreground="{StaticResource MutedBrush}" FontSize="11" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding TechnicalDetails}" Foreground="#858BA2" FontSize="10" TextTrimming="CharacterEllipsis"/></StackPanel><TextBlock Grid.Column="1" Text="{Binding AvailabilityDisplay}" HorizontalAlignment="Right" Foreground="#C7B5FF"/></Grid></Border></DataTemplate></ListBox.ItemTemplate></ListBox></Grid></Border>
-                        </Grid>
-                    </TabItem>
-                    <TabItem Header="纯音频幻灯片">
-                        <Border Margin="6,18" Background="{StaticResource PanelBrush}" CornerRadius="20" Padding="28"><StackPanel><TextBlock Text="纯音频幻灯片" FontSize="23" FontWeight="Bold"/><TextBlock Text="为 MP3、FLAC、WAV 等纯音频歌曲配置本地图片、封面优先级、切换间隔和显示方式。播放时与暂停、继续、定位、重播保持同步。" TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" LineHeight="23" Margin="0,12,0,20"/><Button Content="打开幻灯片编辑器" Command="{Binding OpenSlideshowEditorCommand}" HorizontalAlignment="Left"/><TextBlock Text="没有自定义图片时自动使用封面、同目录图片或程序自带的离线背景。" Foreground="#858BA2" TextWrapping="Wrap" Margin="0,16,0,0"/></StackPanel></Border>
-                    </TabItem>
-                    <TabItem Header="设置 / 维护">
-                        <ScrollViewer VerticalScrollBarVisibility="Auto">
-                            <Grid Margin="6,18"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
-                                <Border Background="{StaticResource PanelBrush}" CornerRadius="20" Padding="25" Margin="0,0,9,0"><StackPanel><TextBlock Text="播放与队列" FontSize="21" FontWeight="Bold"/><TextBlock Text="媒体根目录（相对路径）" Foreground="{StaticResource MutedBrush}" Margin="0,16,0,4"/><TextBox Text="{Binding Settings.MediaRoot}"/><Grid Margin="0,10,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions><StackPanel Margin="0,0,6,0"><TextBlock Text="播放显示器序号" Foreground="{StaticResource MutedBrush}"/><TextBox Text="{Binding Settings.PlaybackDisplayIndex}"/></StackPanel><StackPanel Grid.Column="1" Margin="6,0,0,0"><TextBlock Text="默认音量" Foreground="{StaticResource MutedBrush}"/><Slider Minimum="0" Maximum="125" Value="{Binding Volume}" Margin="0,12"/></StackPanel></Grid><TextBlock Text="默认音频输出设备 ID（留空使用系统默认）" Foreground="{StaticResource MutedBrush}" Margin="0,10,0,4"/><ComboBox IsEditable="True" ItemsSource="{Binding AudioOutputDevices}" Text="{Binding Settings.DefaultAudioOutput,UpdateSourceTrigger=PropertyChanged}"/><TextBlock Text="默认原唱/伴奏模式" Foreground="{StaticResource MutedBrush}" Margin="0,10,0,4"/><ComboBox ItemsSource="{Binding AudioModes}" SelectedItem="{Binding Settings.DefaultAudioMode}"/><TextBlock Text="队列排序模式" Foreground="{StaticResource MutedBrush}" Margin="0,10,0,4"/><ComboBox ItemsSource="{Binding QueueModes}" SelectedItem="{Binding Settings.QueueOrderingMode}"/><CheckBox Content="大屏默认全屏" IsChecked="{Binding Settings.PlaybackFullscreen}" Margin="0,12,0,4"/><CheckBox Content="大屏显示手机二维码" IsChecked="{Binding Settings.ShowQrCode}"/><TextBlock Text="空闲背景（相对路径）" Foreground="{StaticResource MutedBrush}" Margin="0,10,0,4"/><TextBox Text="{Binding Settings.IdleBackgroundRelativePath}"/><TextBlock Text="当前歌曲歌词同步" Foreground="{StaticResource MutedBrush}" Margin="0,14,0,4"/><StackPanel Orientation="Horizontal"><Button Style="{StaticResource GhostButton}" Content="提前 100ms" Command="{Binding LyricsEarlierCommand}"/><Button Style="{StaticResource GhostButton}" Content="延后 100ms" Command="{Binding LyricsLaterCommand}"/></StackPanel></StackPanel></Border>
-                                <Border Grid.Column="1" Background="{StaticResource PanelBrush}" CornerRadius="20" Padding="25" Margin="9,0,0,0"><StackPanel><TextBlock Text="网络与数据" FontSize="21" FontWeight="Bold"/><CheckBox Content="启用手机点歌服务" IsChecked="{Binding Settings.MobileOrderingEnabled}" Margin="0,16,0,4"/><CheckBox Content="允许局域网访问（关闭后仅本机）" IsChecked="{Binding Settings.LanModeEnabled}"/><TextBlock Text="服务端口" Foreground="{StaticResource MutedBrush}" Margin="0,10,0,4"/><TextBox Text="{Binding Settings.ServerPort}"/><TextBlock Text="管理员 PIN（至少 4 位）" Foreground="{StaticResource MutedBrush}" Margin="0,10,0,4"/><TextBox Text="{Binding Settings.AdministratorPin}"/><TextBlock Text="日志级别" Foreground="{StaticResource MutedBrush}" Margin="0,10,0,4"/><ComboBox ItemsSource="{Binding LogLevels}" SelectedItem="{Binding Settings.LogLevel}"/><TextBlock Text="自动备份间隔（小时）" Foreground="{StaticResource MutedBrush}" Margin="0,10,0,4"/><TextBox Text="{Binding Settings.AutomaticBackupHours}"/><CheckBox Content="启动时扫描 Media/ImportBox" IsChecked="{Binding Settings.ScanImportBoxOnStartup}" Margin="0,12,0,4"/><CheckBox Content="启动时执行 FFprobe 媒体检查" IsChecked="{Binding Settings.InspectMediaOnStartup}"/><Button Content="保存设置" Command="{Binding SaveSettingsCommand}" Margin="0,16,0,4"/><TextBlock Text="网络、日志级别和自动备份间隔在重启后完全生效。" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/><StackPanel Orientation="Horizontal" Margin="0,14,0,0"><Button Style="{StaticResource GhostButton}" Content="备份数据库" Command="{Binding BackupCommand}"/><Button Style="{StaticResource GhostButton}" Content="恢复数据库" Command="{Binding RestoreCommand}"/></StackPanel></StackPanel></Border>
+                            <Grid Grid.Row="2"><Grid.RowDefinitions><RowDefinition Height="40"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                                <Grid><TextBlock Text="{Binding LibraryViewTitle}" FontSize="19" FontWeight="Bold"/><TextBlock Text="{Binding Songs.Count,StringFormat={}{0} 首结果}" HorizontalAlignment="Right" Foreground="{StaticResource MutedBrush}"/></Grid>
+                                <ListBox Grid.Row="1" ItemsSource="{Binding Songs}" ItemTemplate="{StaticResource SongRowTemplate}" ItemContainerStyle="{StaticResource FlatListItem}" Background="Transparent" BorderThickness="0"/>
                             </Grid>
-                        </ScrollViewer>
+                        </Grid>
                     </TabItem>
-                    <TabItem Header="日志 / 诊断">
-                        <Border Margin="6,18" Background="{StaticResource PanelBrush}" CornerRadius="20" Padding="24"><Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions><Grid><TextBlock Text="运行状态与网络诊断" FontSize="23" FontWeight="Bold"/><StackPanel Orientation="Horizontal" HorizontalAlignment="Right"><Button Style="{StaticResource GhostButton}" Content="刷新日志" Command="{Binding RefreshLogsCommand}"/><Button Style="{StaticResource GhostButton}" Content="打开 Logs" Command="{Binding OpenLogsFolderCommand}"/></StackPanel></Grid><Border Grid.Row="1" Background="#10121D" CornerRadius="14" Padding="16" Margin="0,14"><Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="手机访问地址" Foreground="{StaticResource MutedBrush}"/><TextBlock Text="{Binding ServerAddress}" FontSize="18" FontWeight="SemiBold" Margin="0,5"/></StackPanel><StackPanel Grid.Column="1"><TextBlock Text="当前状态" Foreground="{StaticResource MutedBrush}"/><TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" Margin="0,5"/></StackPanel></Grid></Border><TextBlock Grid.Row="2" Text="最近 300 行日志" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,6"/><TextBox Grid.Row="3" Text="{Binding LogText}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" FontFamily="Consolas" FontSize="12"/></Grid></Border>
+
+                    <TabItem Header="已点">
+                        <Grid Margin="24,18,24,10">
+                            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                            <Grid><StackPanel><TextBlock Text="已点歌曲" Style="{StaticResource SectionTitle}"/><TextBlock Text="可置顶、调整顺序或移除等待中的歌曲" Style="{StaticResource SectionSubtitle}"/></StackPanel><Button Content="清空队列" Command="{Binding ClearQueueCommand}" HorizontalAlignment="Right" VerticalAlignment="Center"/></Grid>
+                            <ListBox Grid.Row="1" Margin="0,18,0,0" ItemsSource="{Binding QueueItems}" ItemTemplate="{StaticResource QueueRowTemplate}" ItemContainerStyle="{StaticResource FlatListItem}" Background="Transparent" BorderThickness="0"/>
+                        </Grid>
                     </TabItem>
-                    <TabItem Header="歌词设置">
-                        <ScrollViewer VerticalScrollBarVisibility="Auto">
-                            <Border Margin="6,18" Background="{StaticResource PanelBrush}" CornerRadius="20" Padding="25">
-                                <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
-                                    <StackPanel Margin="0,0,18,0">
-                                        <TextBlock Text="歌词显示控制" FontSize="21" FontWeight="Bold"/>
-                                        <CheckBox Content="默认显示歌词" IsChecked="{Binding Settings.Lyrics.DefaultVisible}" Margin="0,16,0,4"/>
-                                        <CheckBox Content="播放时记住歌词状态" IsChecked="{Binding Settings.Lyrics.RememberVisibility}"/>
-                                        <CheckBox Content="切歌恢复默认状态" IsChecked="{Binding Settings.Lyrics.RestoreDefaultOnSongChange}"/>
-                                        <CheckBox Content="隐藏歌词时保留顶部歌曲信息" IsChecked="{Binding Settings.Lyrics.KeepSongInformationWhenHidden}"/>
-                                        <CheckBox Content="隐藏歌词时保留下一首提示" IsChecked="{Binding Settings.Lyrics.KeepNextSongWhenHidden}"/>
-                                        <CheckBox Content="自动隐藏纯音乐歌词" IsChecked="{Binding Settings.Lyrics.AutoHideInstrumentalLyrics}"/>
-                                        <TextBlock Text="歌词切换快捷键" Foreground="{StaticResource MutedBrush}" Margin="0,12,0,4"/>
-                                        <TextBox Text="{Binding Settings.Lyrics.ToggleShortcutKey,UpdateSourceTrigger=PropertyChanged}"/>
-                                        <TextBlock Text="歌词模式" Foreground="{StaticResource MutedBrush}" Margin="0,12,0,4"/>
-                                        <ComboBox ItemsSource="{Binding LyricsDisplayModes}" SelectedItem="{Binding Settings.Lyrics.DisplayMode}"/>
-                                        <TextBlock Text="歌词位置" Foreground="{StaticResource MutedBrush}" Margin="0,12,0,4"/>
-                                        <ComboBox ItemsSource="{Binding LyricsOverlayPositions}" SelectedItem="{Binding Settings.Lyrics.Position}"/>
-                                    </StackPanel>
-                                    <StackPanel Grid.Column="1">
-                                        <TextBlock Text="歌词样式" FontSize="21" FontWeight="Bold"/>
-                                        <TextBlock Text="字体" Foreground="{StaticResource MutedBrush}" Margin="0,16,0,4"/><TextBox Text="{Binding Settings.Lyrics.FontFamily}"/>
-                                        <TextBlock Text="字号" Foreground="{StaticResource MutedBrush}" Margin="0,10,0,4"/><Slider Minimum="12" Maximum="96" Value="{Binding Settings.Lyrics.FontSize}"/>
-                                        <TextBlock Text="普通歌词颜色" Foreground="{StaticResource MutedBrush}" Margin="0,10,0,4"/><TextBox Text="{Binding Settings.Lyrics.FontColor}"/>
-                                        <TextBlock Text="当前歌词颜色" Foreground="{StaticResource MutedBrush}" Margin="0,10,0,4"/><TextBox Text="{Binding Settings.Lyrics.CurrentFontColor}"/>
-                                        <CheckBox Content="文字阴影" IsChecked="{Binding Settings.Lyrics.ShadowEnabled}" Margin="0,12,0,4"/>
-                                        <CheckBox Content="半透明背景" IsChecked="{Binding Settings.Lyrics.TranslucentBackground}"/>
-                                        <TextBlock Text="背景透明度" Foreground="{StaticResource MutedBrush}" Margin="0,10,0,4"/><Slider Minimum="0" Maximum="1" Value="{Binding Settings.Lyrics.BackgroundOpacity}"/>
-                                        <TextBlock Text="左右边距" Foreground="{StaticResource MutedBrush}" Margin="0,10,0,4"/><Slider Minimum="0" Maximum="400" Value="{Binding Settings.Lyrics.HorizontalMargin}"/>
-                                        <Button Content="保存歌词设置" Command="{Binding SaveSettingsCommand}" Margin="0,16,0,0"/>
-                                    </StackPanel>
+
+                    <TabItem Header="管理">
+                        <TabControl Margin="18,8,18,6" Background="Transparent" BorderThickness="0">
+                            <TabItem Header="导入与媒体">
+                                <Grid Margin="6,16"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+                                    <Border Background="{StaticResource PanelBrush}" CornerRadius="6" Padding="24" Margin="0,0,8,0">
+                                        <StackPanel><TextBlock Text="歌曲导入" FontSize="22" FontWeight="Bold"/><TextBlock Text="导入单曲、整批歌曲文件夹，或从导入箱自动识别原唱、伴奏、歌词和封面。" TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" LineHeight="22" Margin="0,10,0,16"/><Button Content="导入单曲" Command="{Binding ImportCommand}"/><Button Style="{StaticResource GhostButton}" Content="批量扫描歌曲文件夹" Command="{Binding BatchImportCommand}"/><Button Style="{StaticResource GhostButton}" Content="扫描 Media/ImportBox" Command="{Binding ScanImportBoxCommand}"/><Button Style="{StaticResource GhostButton}" Content="HTTP/HTTPS 直链导入" Command="{Binding UrlImportCommand}"/><Button Style="{StaticResource GhostButton}" Content="FFmpeg 转码" Command="{Binding TranscodeCommand}"/><Button Style="{StaticResource GhostButton}" Content="纯音频幻灯片设置" Command="{Binding OpenSlideshowEditorCommand}"/></StackPanel>
+                                    </Border>
+                                    <Border Grid.Column="1" Background="{StaticResource PanelBrush}" CornerRadius="6" Padding="22" Margin="8,0,0,0">
+                                        <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                                            <TextBlock Text="媒体健康检查" FontSize="22" FontWeight="Bold"/>
+                                            <Grid Grid.Row="1" Margin="0,12"><StackPanel><TextBlock Text="{Binding AvailableSongCount,StringFormat={}可用媒体：{0} 首}"/><TextBlock Text="{Binding SongCount,StringFormat={}歌曲总数：{0} 首}" Foreground="{StaticResource MutedBrush}"/></StackPanel><Button Content="FFprobe 检查" Command="{Binding InspectMediaCommand}" HorizontalAlignment="Right"/></Grid>
+                                            <ListBox Grid.Row="2" ItemsSource="{Binding MediaInspectionResults}" Background="Transparent" BorderThickness="0"><ListBox.ItemTemplate><DataTemplate><Border Background="#241D2D" CornerRadius="5" Padding="10" Margin="0,3"><Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="90"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="{Binding Title}"/><TextBlock Text="{Binding Details}" Foreground="{StaticResource MutedBrush}" FontSize="11" TextTrimming="CharacterEllipsis"/></StackPanel><TextBlock Grid.Column="1" Text="{Binding AvailabilityDisplay}" HorizontalAlignment="Right" Foreground="#2DD4BF"/></Grid></Border></DataTemplate></ListBox.ItemTemplate></ListBox>
+                                        </Grid>
+                                    </Border>
                                 </Grid>
-                            </Border>
-                        </ScrollViewer>
-                    </TabItem>
-                    <TabItem Header="手机网络">
-                        <StackPanel Margin="24" MaxWidth="540">
-                            <TextBlock Text="手机访问" FontSize="23" FontWeight="Bold"/>
-                            <TextBlock Text="{Binding ServerAddress}" FontSize="18" FontWeight="SemiBold" Margin="0,16,0,12"/>
-                            <Button Content="配置手机访问" Command="{Binding ConfigureMobileAccessCommand}" HorizontalAlignment="Left"/>
-                        </StackPanel>
+                            </TabItem>
+                            <TabItem Header="播放设置">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto"><Grid Margin="8,16"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+                                    <StackPanel Margin="0,0,16,0"><TextBlock Text="播放与音频" FontSize="21" FontWeight="Bold"/><TextBlock Text="媒体根目录" Foreground="{StaticResource MutedBrush}" Margin="0,14,0,4"/><TextBox Text="{Binding Settings.MediaRoot}"/><TextBlock Text="播放显示器序号" Foreground="{StaticResource MutedBrush}" Margin="0,10,0,4"/><TextBox Text="{Binding Settings.PlaybackDisplayIndex}"/><TextBlock Text="音频输出设备" Foreground="{StaticResource MutedBrush}" Margin="0,10,0,4"/><ComboBox IsEditable="True" ItemsSource="{Binding AudioOutputDevices}" Text="{Binding Settings.DefaultAudioOutput,UpdateSourceTrigger=PropertyChanged}"/><TextBlock Text="默认原唱/伴奏模式" Foreground="{StaticResource MutedBrush}" Margin="0,10,0,4"/><ComboBox ItemsSource="{Binding AudioModes}" SelectedItem="{Binding Settings.DefaultAudioMode}"/><TextBlock Text="队列排序模式" Foreground="{StaticResource MutedBrush}" Margin="0,10,0,4"/><ComboBox ItemsSource="{Binding QueueModes}" SelectedItem="{Binding Settings.QueueOrderingMode}"/></StackPanel>
+                                    <StackPanel Grid.Column="1"><TextBlock Text="大屏与同步" FontSize="21" FontWeight="Bold"/><TextBlock Text="默认音量" Foreground="{StaticResource MutedBrush}" Margin="0,14,0,2"/><Slider Minimum="0" Maximum="125" Value="{Binding Volume}"/><TextBlock Text="{Binding AccompanimentVolumeGain,StringFormat={}伴奏音量比例：{0:F1} 倍}" Foreground="{StaticResource MutedBrush}" Margin="0,10,0,2"/><Slider Minimum="0.1" Maximum="1.5" TickFrequency="0.1" IsSnapToTickEnabled="True" Value="{Binding AccompanimentVolumeGain}"/><CheckBox Content="大屏默认全屏" IsChecked="{Binding Settings.PlaybackFullscreen}"/><CheckBox Content="大屏显示手机二维码" IsChecked="{Binding Settings.ShowQrCode}"/><TextBlock Text="空闲背景（相对路径）" Foreground="{StaticResource MutedBrush}" Margin="0,10,0,4"/><TextBox Text="{Binding Settings.IdleBackgroundRelativePath}"/><TextBlock Text="当前歌曲歌词同步" Foreground="{StaticResource MutedBrush}" Margin="0,14,0,4"/><StackPanel Orientation="Horizontal"><Button Style="{StaticResource GhostButton}" Content="提前 100ms" Command="{Binding LyricsEarlierCommand}"/><Button Style="{StaticResource GhostButton}" Content="延后 100ms" Command="{Binding LyricsLaterCommand}"/></StackPanel><TextBlock Text="当前伴奏同步" Foreground="{StaticResource MutedBrush}" Margin="0,12,0,4"/><StackPanel Orientation="Horizontal"><Button Style="{StaticResource GhostButton}" Content="提前 50ms" IsEnabled="{Binding CanAdjustAccompanimentSync}" Command="{Binding AccompanimentEarlierCommand}"/><Button Style="{StaticResource GhostButton}" Content="延后 50ms" IsEnabled="{Binding CanAdjustAccompanimentSync}" Command="{Binding AccompanimentLaterCommand}"/></StackPanel><Button Content="保存播放设置" Command="{Binding SaveSettingsCommand}" Margin="4,18,4,4"/></StackPanel>
+                                </Grid></ScrollViewer>
+                            </TabItem>
+                            <TabItem Header="歌词设置">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto"><Grid Margin="8,16"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+                                    <StackPanel Margin="0,0,16,0"><TextBlock Text="歌词显示" FontSize="21" FontWeight="Bold"/><CheckBox Content="默认显示歌词" IsChecked="{Binding Settings.Lyrics.DefaultVisible}" Margin="4,14,4,7"/><CheckBox Content="记住歌词显示状态" IsChecked="{Binding Settings.Lyrics.RememberVisibility}"/><CheckBox Content="切歌恢复默认状态" IsChecked="{Binding Settings.Lyrics.RestoreDefaultOnSongChange}"/><CheckBox Content="隐藏歌词时保留歌曲信息" IsChecked="{Binding Settings.Lyrics.KeepSongInformationWhenHidden}"/><CheckBox Content="隐藏歌词时保留下一首提示" IsChecked="{Binding Settings.Lyrics.KeepNextSongWhenHidden}"/><CheckBox Content="自动隐藏纯音乐歌词" IsChecked="{Binding Settings.Lyrics.AutoHideInstrumentalLyrics}"/><TextBlock Text="歌词切换快捷键" Foreground="{StaticResource MutedBrush}" Margin="0,10,0,4"/><TextBox Text="{Binding Settings.Lyrics.ToggleShortcutKey,UpdateSourceTrigger=PropertyChanged}"/><TextBlock Text="歌词模式" Foreground="{StaticResource MutedBrush}" Margin="0,10,0,4"/><ComboBox ItemsSource="{Binding LyricsDisplayModes}" SelectedItem="{Binding Settings.Lyrics.DisplayMode}"/><TextBlock Text="歌词位置" Foreground="{StaticResource MutedBrush}" Margin="0,10,0,4"/><ComboBox ItemsSource="{Binding LyricsOverlayPositions}" SelectedItem="{Binding Settings.Lyrics.Position}"/></StackPanel>
+                                    <StackPanel Grid.Column="1"><TextBlock Text="歌词样式" FontSize="21" FontWeight="Bold"/><TextBlock Text="字体" Foreground="{StaticResource MutedBrush}" Margin="0,14,0,4"/><TextBox Text="{Binding Settings.Lyrics.FontFamily}"/><TextBlock Text="字号" Foreground="{StaticResource MutedBrush}" Margin="0,10,0,2"/><Slider Minimum="12" Maximum="140" Value="{Binding Settings.Lyrics.FontSize}"/><TextBlock Text="普通歌词颜色" Foreground="{StaticResource MutedBrush}" Margin="0,10,0,4"/><TextBox Text="{Binding Settings.Lyrics.FontColor}"/><TextBlock Text="当前歌词颜色" Foreground="{StaticResource MutedBrush}" Margin="0,10,0,4"/><TextBox Text="{Binding Settings.Lyrics.CurrentFontColor}"/><CheckBox Content="文字阴影" IsChecked="{Binding Settings.Lyrics.ShadowEnabled}"/><CheckBox Content="半透明背景" IsChecked="{Binding Settings.Lyrics.TranslucentBackground}"/><TextBlock Text="背景透明度" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,2"/><Slider Minimum="0" Maximum="1" Value="{Binding Settings.Lyrics.BackgroundOpacity}"/><TextBlock Text="左右边距" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,2"/><Slider Minimum="0" Maximum="400" Value="{Binding Settings.Lyrics.HorizontalMargin}"/><Button Content="保存歌词设置" Command="{Binding SaveSettingsCommand}" Margin="4,14,4,4"/></StackPanel>
+                                </Grid></ScrollViewer>
+                            </TabItem>
+                            <TabItem Header="网络与维护">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto"><Grid Margin="8,16"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+                                    <StackPanel Margin="0,0,16,0"><TextBlock Text="手机点歌服务" FontSize="21" FontWeight="Bold"/><TextBlock Text="{Binding ServerAddress}" Foreground="#2DD4BF" FontSize="16" Margin="0,14,0,8" TextWrapping="Wrap"/><CheckBox Content="启用手机点歌服务" IsChecked="{Binding Settings.MobileOrderingEnabled}"/><CheckBox Content="允许局域网访问" IsChecked="{Binding Settings.LanModeEnabled}"/><TextBlock Text="服务端口" Foreground="{StaticResource MutedBrush}" Margin="0,10,0,4"/><TextBox Text="{Binding Settings.ServerPort}"/><TextBlock Text="管理员 PIN" Foreground="{StaticResource MutedBrush}" Margin="0,10,0,4"/><TextBox Text="{Binding Settings.AdministratorPin}"/><Button Style="{StaticResource GhostButton}" Content="配置 Windows 防火墙" Command="{Binding ConfigureMobileAccessCommand}" Margin="4,14,4,4"/><Button Style="{StaticResource GhostButton}" Content="显示手机点歌二维码" Command="{Binding ShowQrCommand}"/></StackPanel>
+                                    <StackPanel Grid.Column="1"><TextBlock Text="数据与启动" FontSize="21" FontWeight="Bold"/><TextBlock Text="日志级别" Foreground="{StaticResource MutedBrush}" Margin="0,14,0,4"/><ComboBox ItemsSource="{Binding LogLevels}" SelectedItem="{Binding Settings.LogLevel}"/><TextBlock Text="自动备份间隔（小时）" Foreground="{StaticResource MutedBrush}" Margin="0,10,0,4"/><TextBox Text="{Binding Settings.AutomaticBackupHours}"/><CheckBox Content="启动时扫描 Media/ImportBox" IsChecked="{Binding Settings.ScanImportBoxOnStartup}" Margin="4,12,4,7"/><CheckBox Content="启动时执行 FFprobe 媒体检查" IsChecked="{Binding Settings.InspectMediaOnStartup}"/><Button Content="保存设置" Command="{Binding SaveSettingsCommand}" Margin="4,14,4,4"/><StackPanel Orientation="Horizontal"><Button Style="{StaticResource GhostButton}" Content="备份数据库" Command="{Binding BackupCommand}"/><Button Style="{StaticResource GhostButton}" Content="恢复数据库" Command="{Binding RestoreCommand}"/></StackPanel></StackPanel>
+                                </Grid></ScrollViewer>
+                            </TabItem>
+                            <TabItem Header="日志诊断">
+                                <Grid Margin="8,16"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                                    <Grid><StackPanel><TextBlock Text="运行状态与诊断" FontSize="21" FontWeight="Bold"/><TextBlock Text="{Binding StatusMessage}" Foreground="{StaticResource MutedBrush}" Margin="0,5,0,0" TextWrapping="Wrap"/></StackPanel><StackPanel Orientation="Horizontal" HorizontalAlignment="Right"><Button Style="{StaticResource GhostButton}" Content="刷新日志" Command="{Binding RefreshLogsCommand}"/><Button Style="{StaticResource GhostButton}" Content="打开 Logs" Command="{Binding OpenLogsFolderCommand}"/></StackPanel></Grid>
+                                    <TextBlock Grid.Row="1" Text="最近 300 行日志" Foreground="{StaticResource MutedBrush}" Margin="0,14,0,6"/>
+                                    <TextBox Grid.Row="2" Text="{Binding LogText}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" FontFamily="Consolas" FontSize="12"/>
+                                </Grid>
+                            </TabItem>
+                        </TabControl>
                     </TabItem>
                 </TabControl>
-                <TextBlock Grid.Row="2" Text="{Binding StatusMessage}" Foreground="{StaticResource MutedBrush}" Margin="4,8,0,0"/>
+                <TextBlock Grid.Row="2" Text="{Binding StatusMessage}" Foreground="{StaticResource MutedBrush}" Margin="24,2,0,0" FontSize="11"/>
             </Grid>
         </Grid>
-        <Border Grid.Row="1" Background="#111421" BorderBrush="#272B3E" BorderThickness="0,1,0,0">
-            <Grid Margin="20,10">
-                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="300"/></Grid.ColumnDefinitions>
-                <StackPanel Orientation="Horizontal"><Border Width="62" Height="62" CornerRadius="16" Background="#392C58"><TextBlock Text="▶" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#F1B1D0"/></Border><StackPanel Margin="14,7,0,0"><TextBlock Text="{Binding CurrentTitle}" FontSize="17" FontWeight="Bold"/><TextBlock Foreground="{StaticResource MutedBrush}" Margin="0,5,0,0"><Run Text="{Binding CurrentArtist}"/><Run Text="  ·  "/><Run Text="{Binding CurrentRequester}"/></TextBlock></StackPanel></StackPanel>
-                <WrapPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right"><CheckBox Content="歌词" IsChecked="{Binding IsLyricsVisible}" VerticalAlignment="Center" ToolTip="显示或隐藏大屏歌词；关闭后时间同步继续"/><Button Style="{StaticResource GhostButton}" Content="重唱" Command="{Binding RestartCommand}"/><Button Content="{Binding PauseButtonText}" Command="{Binding TogglePauseCommand}" MinWidth="82"/><Button Style="{StaticResource GhostButton}" Content="切歌" Command="{Binding SkipCommand}"/><Button Style="{StaticResource GhostButton}" Content="原唱" ToolTip="播放原始媒体音频并保存为默认音轨" Command="{Binding OriginalCommand}"/><Button Style="{StaticResource GhostButton}" Content="伴奏" ToolTip="播放已关联伴奏并保存为默认音轨" IsEnabled="{Binding CanUseAccompaniment}" Command="{Binding AccompanimentCommand}"/><Button Style="{StaticResource GhostButton}" Content="伴奏早" ToolTip="外部伴奏提前 50ms，并保存到当前歌曲" IsEnabled="{Binding CanAdjustAccompanimentSync}" Command="{Binding AccompanimentEarlierCommand}"/><Button Style="{StaticResource GhostButton}" Content="伴奏晚" ToolTip="外部伴奏延后 50ms，并保存到当前歌曲" IsEnabled="{Binding CanAdjustAccompanimentSync}" Command="{Binding AccompanimentLaterCommand}"/><Button Style="{StaticResource GhostButton}" Content="左声道" ToolTip="左声道" Command="{Binding LeftChannelCommand}"/><Button Style="{StaticResource GhostButton}" Content="立体声" ToolTip="立体声音效" Command="{Binding StereoCommand}"/><Button Style="{StaticResource GhostButton}" Content="右声道" ToolTip="右声道" Command="{Binding RightChannelCommand}"/></WrapPanel>
-                <StackPanel Grid.Column="2" Margin="20,0,0,0" VerticalAlignment="Center"><Grid><TextBlock Text="主音量" Foreground="{StaticResource MutedBrush}"/><TextBlock Text="{Binding Volume}" HorizontalAlignment="Right"/></Grid><Slider Minimum="0" Maximum="125" Value="{Binding Volume}" Margin="0,8,0,0"/></StackPanel>
+
+        <Border Grid.Row="1" Background="#14181B" BorderBrush="#2B3035" BorderThickness="0,1,0,0">
+            <Grid Margin="18,10">
+                <Grid.ColumnDefinitions><ColumnDefinition MinWidth="250"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="230"/></Grid.ColumnDefinitions>
+                <StackPanel Orientation="Horizontal">
+                    <Border Width="68" Height="68" CornerRadius="6" Background="#30263D" ClipToBounds="True"><Grid><TextBlock Text="♪" FontSize="26" Foreground="#BFA7FF" HorizontalAlignment="Center" VerticalAlignment="Center"/><Image Source="{Binding CurrentCoverRelativePath,Converter={StaticResource PortableImage}}" Stretch="UniformToFill"/></Grid></Border>
+                    <StackPanel Margin="13,8,0,0" MaxWidth="320"><TextBlock Text="{Binding CurrentTitle}" FontSize="17" FontWeight="Bold" TextTrimming="CharacterEllipsis"/><TextBlock Foreground="{StaticResource MutedBrush}" Margin="0,5,0,0" TextTrimming="CharacterEllipsis"><Run Text="{Binding CurrentArtist}"/><Run Text="  ·  "/><Run Text="{Binding CurrentRequester}"/></TextBlock></StackPanel>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <CheckBox Content="歌词" IsChecked="{Binding IsLyricsVisible}" ToolTip="显示或隐藏大屏歌词"/>
+                    <Button Style="{StaticResource GhostButton}" Content="重唱" Command="{Binding RestartCommand}"/>
+                    <Button Content="{Binding PauseButtonText}" Command="{Binding TogglePauseCommand}" MinWidth="78"/>
+                    <Button Style="{StaticResource GhostButton}" Content="切歌" Command="{Binding SkipCommand}"/>
+                    <Button Style="{StaticResource GhostButton}" Content="原唱" Command="{Binding OriginalCommand}"/>
+                    <Button Style="{StaticResource GhostButton}" Content="伴奏" IsEnabled="{Binding CanUseAccompaniment}" Command="{Binding AccompanimentCommand}"/>
+                </StackPanel>
+                <StackPanel Grid.Column="2" Margin="18,4,0,0" VerticalAlignment="Center"><Grid><TextBlock Text="主音量" Foreground="{StaticResource MutedBrush}"/><TextBlock Text="{Binding Volume}" HorizontalAlignment="Right"/></Grid><Slider Minimum="0" Maximum="125" Value="{Binding Volume}" Margin="0,9,0,0"/></StackPanel>
             </Grid>
         </Border>
     </Grid>
