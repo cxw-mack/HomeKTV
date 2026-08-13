@@ -18,7 +18,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();DataContext=_viewModel=viewModel;
         Loaded+=OnLoaded;Closed+=(_,_)=>{if(_playerWindow is not null){_playerWindow.CloseForShutdown();_playerWindow=null;}};
-        viewModel.ShowQrRequested+=(_,_)=>ShowQr();viewModel.ConfigureMobileAccessRequested+=(_,_)=>ConfigureMobileAccess();viewModel.ImportRequested+=async (_,_)=>await ImportAsync();viewModel.UrlImportRequested+=(_,_)=>new UrlImportWindow(_viewModel){Owner=this}.ShowDialog();viewModel.TranscodeRequested+=(_,_)=>new TranscodeWindow(_viewModel){Owner=this}.ShowDialog();viewModel.BatchImportRequested+=async (_,_)=>await ScanFolderAsync();viewModel.ImportBoxRequested+=async (_,_)=>await ScanImportBoxAsync(false);viewModel.RestoreRequested+=async (_,_)=>await RestoreAsync();viewModel.OpenPlayerRequested+=(_,_)=>OpenPlayer();viewModel.ClosePlayerRequested+=(_,_)=>_playerWindow?.HidePlayer();viewModel.CycleDisplayRequested+=(_,_)=>{OpenPlayer();_playerWindow?.MoveToNextScreen();};viewModel.SlideshowEditorRequested+=(_,_)=>new SlideshowEditorWindow(_viewModel){Owner=this}.ShowDialog();viewModel.DeleteSongRequested+=song=>_ = DeleteSongAsync(song);
+        viewModel.ShowQrRequested+=(_,_)=>ShowQr();viewModel.ConfigureMobileAccessRequested+=(_,_)=>ConfigureMobileAccess();viewModel.ImportRequested+=async (_,_)=>await ImportAsync();viewModel.UrlImportRequested+=(_,_)=>new UrlImportWindow(_viewModel){Owner=this}.ShowDialog();viewModel.TranscodeRequested+=(_,_)=>new TranscodeWindow(_viewModel){Owner=this}.ShowDialog();viewModel.BatchImportRequested+=async (_,_)=>await ScanFolderAsync();viewModel.ImportBoxRequested+=async (_,_)=>await ScanImportBoxAsync(false);viewModel.RestoreRequested+=async (_,_)=>await RestoreAsync();viewModel.ClearLibraryRequested+=async (_,_)=>await ClearLibraryAsync();viewModel.OpenPlayerRequested+=(_,_)=>OpenPlayer();viewModel.ClosePlayerRequested+=(_,_)=>_playerWindow?.HidePlayer();viewModel.CycleDisplayRequested+=(_,_)=>{OpenPlayer();_playerWindow?.MoveToNextScreen();};viewModel.SlideshowEditorRequested+=(_,_)=>new SlideshowEditorWindow(_viewModel){Owner=this}.ShowDialog();viewModel.DeleteSongRequested+=song=>_ = DeleteSongAsync(song);
     }
 
     private async void OnLoaded(object sender,RoutedEventArgs e)
@@ -73,6 +73,24 @@ public partial class MainWindow : Window
         if(dialog.ShowDialog(this)==true&&MessageBox.Show("恢复前会自动备份当前数据库。继续吗？","恢复数据库",MessageBoxButton.YesNo,MessageBoxImage.Warning)==MessageBoxResult.Yes&&await _viewModel.RestoreDatabaseAsync(dialog.FileName)){MessageBox.Show("数据库已恢复。HomeKTV 将关闭，请重新打开以使用恢复后的数据。","恢复完成",MessageBoxButton.OK,MessageBoxImage.Information);Application.Current.Shutdown();}
     }
 
+    private async Task ClearLibraryAsync()
+    {
+        if(_viewModel.IsLibraryResetRunning)return;
+        const string scope="将永久删除：\n\n• 全部歌曲、队列、收藏、播放历史和歌手信息\n• MV、原唱、伴奏、歌词、歌曲封面和歌手头像\n• 歌曲幻灯片、生成文件和导入箱内容\n\n设置、日志、数据库备份、待机背景和默认幻灯片会保留。";
+        if(MessageBox.Show(scope+"\n\n确定要清空全部曲库吗？","清空全部曲库",MessageBoxButton.YesNo,MessageBoxImage.Warning)!=MessageBoxResult.Yes)return;
+        const string finalWarning="这是不可撤销的彻底删除。\n\n开始前会自动备份数据库，但歌曲媒体文件不会进入数据库备份，清空后无法恢复。\n\n再次确认清空？";
+        if(MessageBox.Show(finalWarning,"最终确认",MessageBoxButton.YesNo,MessageBoxImage.Stop)!=MessageBoxResult.Yes)return;
+
+        try
+        {
+            var result=await _viewModel.ClearLibraryAsync();
+            var message=$"曲库已清空。\n\n删除歌曲：{result.DeletedSongCount} 首\n删除文件：{result.DeletedFileCount} 个\n释放空间：{FormatBytes(result.DeletedFileBytes)}\n数据库备份：{result.BackupPath}";
+            if(result.Warnings.Count>0)message+="\n\n以下项目需要手动处理：\n"+string.Join(Environment.NewLine,result.Warnings);
+            MessageBox.Show(message,result.Warnings.Count==0?"清空完成":"清空完成（有警告）",MessageBoxButton.OK,result.Warnings.Count==0?MessageBoxImage.Information:MessageBoxImage.Warning);
+        }
+        catch(Exception exception){MessageBox.Show("清空曲库失败，原有文件和数据库已尽可能保留。\n\n"+exception.Message,"清空失败",MessageBoxButton.OK,MessageBoxImage.Error);}
+    }
+
     private async Task ScanFolderAsync()
     {
         var dialog=new OpenFolderDialog{Title="选择乐库根目录（每首歌曲一个文件夹）",Multiselect=false};
@@ -105,5 +123,12 @@ public partial class MainWindow : Window
     }
 
     private void PauseButton_Click(object sender,RoutedEventArgs e)=>_viewModel.TogglePauseCommand.Execute(null);
+    private static string FormatBytes(long bytes)=>bytes switch
+    {
+        >=1024L*1024*1024=>$"{bytes/1024d/1024/1024:F2} GB",
+        >=1024L*1024=>$"{bytes/1024d/1024:F2} MB",
+        >=1024=>$"{bytes/1024d:F2} KB",
+        _=>$"{bytes} B"
+    };
     private static string? FindCompanion(string directory,string stem,string extension){var path=Path.Combine(directory,stem+extension);return File.Exists(path)?path:null;}
 }

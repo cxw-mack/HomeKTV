@@ -1,0 +1,4 @@
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item><shape android:shape="rectangle"><solid android:color="#211236" /></shape></item>
+    <item android:top="24dp" android:bottom="24dp" android:left="120dp" android:right="120dp" android:drawable="@drawable/homektv_icon" />
+</layer-list>

@@ -311,19 +311,34 @@ public sealed class LibVlcPlaybackService : IPlaybackService
     private void DisposeExternalAudioCore()
     {
         var output=_externalOutput;var reader=_externalReader;_externalOutput=null;_externalReader=null;_externalGain=null;_externalFade=null;
-        try{output?.Stop();}catch(MmException){}
-        output?.Dispose();reader?.Dispose();_externalAudioPath=null;_usingExternalAudio=false;_externalAudioSelected=false;_externalSyncWarmupUntilTimestamp=0;_externalSyncViolationCount=0;_externalAudioSeekCount=0;
+        if(output is not null)output.PlaybackStopped-=OnExternalPlaybackStopped;
+        try{output?.Stop();}catch(MmException){}catch(InvalidOperationException){}
+        try{output?.Dispose();}catch(MmException){}catch(InvalidOperationException){}
+        try{reader?.Dispose();}catch(InvalidOperationException){}
+        _externalAudioPath=null;_usingExternalAudio=false;_externalAudioSelected=false;_externalSyncWarmupUntilTimestamp=0;_externalSyncViolationCount=0;_externalAudioSeekCount=0;
     }
     private void OnExternalPlaybackStopped(object? sender,StoppedEventArgs args)
     {
         if(args.Exception is null)return;
         var message=$"Windows 音频输出播放 AI 伴奏失败，已回退 MV 原始音频：{args.Exception.Message}";
-        lock(_sync)
+        var failedOutput=sender;
+        ThreadPool.QueueUserWorkItem(_=>RecoverFromExternalAudioFailure(failedOutput,message));
+    }
+    private void RecoverFromExternalAudioFailure(object? failedOutput,string message)
+    {
+        try
         {
-            if(!ReferenceEquals(sender,_externalOutput))return;
-            RecoverEmbeddedAudioCore();
+            lock(_sync)
+            {
+                if(!ReferenceEquals(failedOutput,_externalOutput))return;
+                RecoverEmbeddedAudioCore();
+            }
+            ExternalAudioFailed?.Invoke(this,message);
         }
-        ExternalAudioFailed?.Invoke(this,message);
+        catch(Exception exception) when(exception is MmException or InvalidOperationException or ObjectDisposedException)
+        {
+            ExternalAudioFailed?.Invoke(this,message+"；播放器回收异常："+exception.Message);
+        }
     }
     private void SelectExternalAudioCore(bool selected)
     {

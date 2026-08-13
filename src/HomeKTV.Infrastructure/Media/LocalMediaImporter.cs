@@ -70,6 +70,10 @@ public sealed class LocalMediaImporter(PortablePaths paths, HomeKtvDatabase data
         if (inspector.IsAvailable) probe = await inspector.InspectAsync(request.MediaPath, cancellationToken);
         var isVideo = probe?.HasVideo ?? VideoExtensions.Contains(extension);
         var (title, artist) = ResolveIdentity(request, probe);
+        var requestedLanguage = SongLanguageClassifier.Normalize(request.Language);
+        var language = requestedLanguage == SongLanguageClassifier.Other
+            ? SongLanguageClassifier.Infer(artist, title)
+            : requestedLanguage;
         var safeStem = SafeName($"{artist} - {title}");
         var mediaDirectory = isVideo ? MediaDirectory("MV") : Path.Combine(MediaDirectory("Audio"), SafeName(artist));
         var mediaTarget = UniqueTarget(mediaDirectory, safeStem, extension);
@@ -122,7 +126,7 @@ public sealed class LocalMediaImporter(PortablePaths paths, HomeKtvDatabase data
             var keys = PinyinSearchKeyGenerator.Generate(title, artist);
             var song = new Song
             {
-                Title = title, ArtistDisplayName = artist, Language = request.Language, CategoryId = request.CategoryId,
+                Title = title, ArtistDisplayName = artist, Language = language, CategoryId = SongLanguageClassifier.CategoryIdFor(language),
                 Pinyin = keys.FullPinyin, PinyinInitials = keys.Initials,
                 MediaType = isVideo && accompanimentTarget is not null ? SongMediaType.VideoWithExternalAudio : isVideo ? SongMediaType.Video : SongMediaType.Audio,
                 VideoRelativePath = isVideo ? paths.ToRelative(mediaTarget) : string.Empty,

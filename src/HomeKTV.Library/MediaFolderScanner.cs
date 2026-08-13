@@ -102,6 +102,7 @@ public static partial class MediaFolderScanner
             IsAudio = AudioExtensions.Contains(Path.GetExtension(primary)),
             Artist = artist,
             Title = title,
+            Language = SongLanguageClassifier.Infer(artist, title),
             LyricPath = ChooseSidecar(files, primary, LyricExtensions),
             CoverPath = ChooseSidecar(files, primary, ImageExtensions),
             AccompanimentMediaPath = accompaniment,
@@ -121,6 +122,7 @@ public static partial class MediaFolderScanner
                 IsAudio = AudioExtensions.Contains(Path.GetExtension(primary)),
                 Artist = parsed!.Artist,
                 Title = parsed.Title,
+                Language = SongLanguageClassifier.Infer(parsed.Artist, parsed.Title),
                 LyricPath = ChooseSidecar(files, primary, LyricExtensions),
                 CoverPath = ChooseSidecar(files, primary, ImageExtensions),
                 SourceFolder = directory

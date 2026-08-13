@@ -38,6 +38,8 @@ public partial class App : System.Windows.Application
             _database=new HomeKtvDatabase(paths);
             try{await _database.InitializeAsync();if(!await _database.QuickCheckAsync())throw new InvalidDataException("数据库完整性检查失败。");}
             catch(Exception databaseException){_logger.Error(databaseException,"Portable database initialization or integrity check failed");if(await OfferDatabaseRecoveryAsync(paths,e.Args))return;throw new InvalidDataException("数据库无法打开或已损坏。可从 Data/Backups 恢复备份。",databaseException);}
+            var repairedClassifications=await new SongClassificationRepairService(_database).RepairAsync();
+            if(repairedClassifications>0)_logger.Information("Reclassified {Count} existing songs",repairedClassifications);
             var songs=new SqliteSongRepository(_database);var queue=new SqliteQueueRepository(_database);var backups=new DatabaseBackupService(_database,paths);
             var recovered=await queue.RecoverInterruptedAsync();if(recovered>0)_logger.Warning("Recovered {Count} interrupted queue items to waiting state",recovered);
             var inspector=new FfprobeMediaInspector(Path.Combine(paths.Ffmpeg,"ffprobe.exe"));var importer=new LocalMediaImporter(paths,_database,songs,inspector,loaded.Settings.MediaRoot);var mediaInspection=new MediaInspectionService(paths,_database,songs,inspector);var httpDownload=new HttpMediaDownloadService(paths);var transcode=new FfmpegTranscodeService(paths);
@@ -55,6 +57,7 @@ public partial class App : System.Windows.Application
                 _player=new LibVlcPlaybackService(paths);var completed=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);_player.PlaybackEnded+=(_,_)=>completed.TrySetResult();_player.PlaybackFailed+=(_,message)=>completed.TrySetException(new InvalidDataException(message));await _player.PlayAsync(demoPlaybackPath);await completed.Task.WaitAsync(TimeSpan.FromSeconds(30));_logger.Information("LibVLC playback smoke completed");
             }
             if(e.Args.Contains("--existing-media-switch-smoke",StringComparer.OrdinalIgnoreCase))await RunExistingMediaSwitchSmokeAsync(paths,songs,_logger);
+            if(e.Args.Contains("--existing-media-cycle-smoke",StringComparer.OrdinalIgnoreCase))await RunExistingMediaCycleSmokeAsync(paths,songs,_logger);
             if(e.Args.Contains("--portable-media-smoke",StringComparer.OrdinalIgnoreCase))await RunPortableMediaSmokeAsync(paths,importer,_logger);
             if(e.Args.Contains("--health-check",StringComparer.OrdinalIgnoreCase)){_logger.Information("Portable health check completed successfully");Shutdown(0);return;}
             try{_player??=new LibVlcPlaybackService(paths);}catch(Exception exception){_logger.Error(exception,"LibVLC initialization failed; desktop library remains available");}
@@ -75,7 +78,7 @@ public partial class App : System.Windows.Application
                 Shutdown(0);return;
             }
             _automaticBackup=new AutomaticBackupCoordinator(backups,paths,loaded.Settings.AutomaticBackupHours,_logger);_automaticBackup.Start();
-            var viewModel=new MainViewModel(paths,loaded.Settings,_database,songs,queue,importer,httpDownload,transcode,mediaInspection,backups,settingsStore,_player,_playbackCoordinator,_slideshow,new SlideshowConfigurationStore(paths),new SlideshowImageResolver(paths),new SongDeletionService(paths,songs),new SingerPhotoLookupService(paths),_server,_logger);
+            var viewModel=new MainViewModel(paths,loaded.Settings,_database,songs,queue,importer,httpDownload,transcode,mediaInspection,backups,settingsStore,_player,_playbackCoordinator,_slideshow,new SlideshowConfigurationStore(paths),new SlideshowImageResolver(paths),new SongDeletionService(paths,songs),new LibraryResetService(paths,_database,backups,loaded.Settings.MediaRoot),new SingerPhotoLookupService(paths),_server,_logger);
             var window=new MainWindow(viewModel);MainWindow=window;ShutdownMode=ShutdownMode.OnMainWindowClose;window.Show();
             if(e.Args.Contains("--smoke-ui",StringComparer.OrdinalIgnoreCase))
             {
@@ -86,7 +89,7 @@ public partial class App : System.Windows.Application
         catch(Exception exception)
         {
             _logger.Fatal(exception,"HomeKTV startup failed");
-            var isAutomatedCheck=e.Args.Any(argument=>argument is "--health-check" or "--smoke-ui" or "--server-smoke" or "--playback-smoke" or "--existing-media-switch-smoke" or "--portable-media-smoke");
+            var isAutomatedCheck=e.Args.Any(argument=>argument is "--health-check" or "--smoke-ui" or "--server-smoke" or "--playback-smoke" or "--existing-media-switch-smoke" or "--existing-media-cycle-smoke" or "--portable-media-smoke");
             if(!isAutomatedCheck)MessageBox.Show("HomeKTV 启动失败：\n"+exception.Message+"\n\n请查看 Logs 目录中的详细日志。","启动失败",MessageBoxButton.OK,MessageBoxImage.Error);
             Shutdown(1);
         }
@@ -128,7 +131,7 @@ public partial class App : System.Windows.Application
 
     private async Task<bool> OfferDatabaseRecoveryAsync(PortablePaths paths,string[] arguments)
     {
-        if(arguments.Any(x=>x is "--health-check" or "--smoke-ui" or "--server-smoke"))return false;
+        if(arguments.Any(x=>x is "--health-check" or "--smoke-ui" or "--server-smoke" or "--existing-media-switch-smoke" or "--existing-media-cycle-smoke" or "--portable-media-smoke"))return false;
         var backup=Directory.Exists(paths.Backups)?Directory.EnumerateFiles(paths.Backups,"HomeKTV-*.db").OrderByDescending(File.GetLastWriteTimeUtc).FirstOrDefault():null;
         if(backup is null||!await DatabaseBackupService.IsValidDatabaseAsync(backup))return false;
         var answer=MessageBox.Show($"检测到主数据库损坏。\n\n是否恢复最新备份？\n{Path.GetFileName(backup)}\n\n原损坏数据库会保留在 Data/Corrupt 中。","数据库恢复",MessageBoxButton.YesNo,MessageBoxImage.Warning);
@@ -168,6 +171,23 @@ public partial class App : System.Windows.Application
             logger.Information("Existing media switch smoke completed: {Title}, video={VideoMs}, external={ExternalMs}, seeks={SeekCount}",song.Title,_player.PositionMs,_player.ExternalAudioPositionMs,_player.ExternalAudioSeekCount);
         }
         finally{coordinator.Stop();}
+    }
+
+    private async Task RunExistingMediaCycleSmokeAsync(PortablePaths paths,ISongRepository songs,ILogger logger)
+    {
+        var candidates=(await songs.SearchAsync(null,null,5000))
+            .Where(song=>song.MediaType is SongMediaType.Video or SongMediaType.VideoWithExternalAudio)
+            .Where(song=>!string.IsNullOrWhiteSpace(song.AccompanimentAudioRelativePath))
+            .Where(song=>File.Exists(paths.Resolve(song.VideoRelativePath))&&File.Exists(paths.Resolve(song.AccompanimentAudioRelativePath!)))
+            .Take(12).ToList();
+        if(candidates.Count==0)throw new InvalidDataException("媒体库中没有可用于连续伴奏压力检查的 MV。");
+        _player??=new LibVlcPlaybackService(paths);_player.Volume=0;using var coordinator=new MediaPlaybackCoordinator(paths,_player);
+        for(var cycle=0;cycle<12;cycle++)
+        {
+            var song=candidates[cycle%candidates.Count];song.PreferredPlaybackAudio=PreferredPlaybackAudio.AiAccompaniment;
+            await coordinator.PlayAsync(song);await WaitForPlaybackPositionAsync(_player,500,TimeSpan.FromSeconds(10));
+            coordinator.Stop();await Task.Delay(150);logger.Information("Existing media cycle smoke {Cycle}/12 completed: {Title}",cycle+1,song.Title);
+        }
     }
 
     private static async Task WaitForPlaybackEndAsync(LibVlcPlaybackService player,TimeSpan timeout)

@@ -50,7 +50,13 @@
                             <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="border" Property="Background" Value="{StaticResource ControlHoverBrush}"/></Trigger>
                             <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="border" Property="BorderBrush" Value="#FFFFFFFF"/><Setter TargetName="border" Property="BorderThickness" Value="2"/></Trigger>
                             <Trigger Property="IsPressed" Value="True"><Setter TargetName="border" Property="Background" Value="{StaticResource AccentPressedBrush}"/></Trigger>
-                            <Trigger Property="IsEnabled" Value="False"><Setter TargetName="border" Property="Opacity" Value="0.35"/></Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="border" Property="Background" Value="#211D28"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="#3A3444"/>
+                                <Setter TargetName="border" Property="Opacity" Value="1"/>
+                                <Setter Property="Foreground" Value="#AAA4B5"/>
+                                <Setter Property="Cursor" Value="Arrow"/>
+                            </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>

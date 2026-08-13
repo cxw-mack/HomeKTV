@@ -88,12 +88,24 @@ public sealed class ServerIntegrationTests
     }
 
     [Fact]
+    public async Task MobileSessionCanAdjustLyricTimingWhenLyricsAreAvailable()
+    {
+        await using var fixture=await ServerFixture.CreateAsync();using var client=new HttpClient { BaseAddress=new Uri(fixture.Server.LocalAddress) };
+        await fixture.Server.NotifyPlaybackChangedAsync(new(1,"测试歌曲","HomeKTV","Playing",1200,null,true,true,"Original",true,80));
+        PlaybackControlCommand? requested=null;fixture.Server.PlaybackControlRequested+=(command,_)=>{requested=command;return Task.CompletedTask;};var session=await CreateSession(client,"手机用户");
+        using(var decrease=Authorized(HttpMethod.Post,"api/playback/control",session,new{command="lyricsDecreaseFiveSeconds"})){Assert.Equal(HttpStatusCode.NoContent,(await client.SendAsync(decrease)).StatusCode);Assert.Equal(PlaybackControlCommand.LyricsDecreaseFiveSeconds,requested);}
+        using var increase=Authorized(HttpMethod.Post,"api/playback/control",session,new{command="lyricsIncreaseFiveSeconds"});Assert.Equal(HttpStatusCode.NoContent,(await client.SendAsync(increase)).StatusCode);Assert.Equal(PlaybackControlCommand.LyricsIncreaseFiveSeconds,requested);
+    }
+
+    [Fact]
     public async Task MobilePlaybackControlRejectsUnavailableActionsWithoutAdministratorPin()
     {
         await using var fixture=await ServerFixture.CreateAsync();using var client=new HttpClient { BaseAddress=new Uri(fixture.Server.LocalAddress) };var session=await CreateSession(client,"手机用户");
         using(var idle=Authorized(HttpMethod.Post,"api/playback/control",session,new{command="skip"}))Assert.Equal(HttpStatusCode.Conflict,(await client.SendAsync(idle)).StatusCode);
         await fixture.Server.NotifyPlaybackChangedAsync(new(1,"测试歌曲","HomeKTV","Playing",1200,null,true,true,"Original",false,80));
         using var unavailable=Authorized(HttpMethod.Post,"api/playback/control",session,new{command="accompaniment"});Assert.Equal(HttpStatusCode.Conflict,(await client.SendAsync(unavailable)).StatusCode);
+        await fixture.Server.NotifyPlaybackChangedAsync(new(1,"测试歌曲","HomeKTV","Playing",1200,null,true,false,"Original",true,80));
+        using var noLyrics=Authorized(HttpMethod.Post,"api/playback/control",session,new{command="lyricsIncreaseFiveSeconds"});Assert.Equal(HttpStatusCode.Conflict,(await client.SendAsync(noLyrics)).StatusCode);
     }
 
     [Fact]
