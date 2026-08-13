@@ -83,7 +83,17 @@ struct MainView: View {
     private var songList: some View {
         Group {
             if store.visibleSongs.isEmpty {
-                ContentUnavailableView("暂无歌曲", systemImage: "music.note.list", description: Text("点击左下角导入一个包含歌曲文件夹的目录"))
+                VStack(spacing: 12) {
+                    Image(systemName: "music.note.list")
+                        .font(.system(size: 40))
+                        .foregroundStyle(.secondary)
+                    Text("暂无歌曲")
+                        .font(.title3.weight(.semibold))
+                    Text("点击左下角导入一个包含歌曲文件夹的目录")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List(store.visibleSongs) { song in
                     SongRow(song: song)

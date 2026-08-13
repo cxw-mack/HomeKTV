@@ -49,10 +49,10 @@ final class HomeKTVMacTests: XCTestCase {
 
         let songs = try LibraryScanner.scan(folder: root)
         XCTAssertEqual(songs.count, 1)
-        XCTAssertEqual(songs[0].originalPath, original.path)
-        XCTAssertEqual(songs[0].accompanimentPath, accompaniment.path)
-        XCTAssertEqual(songs[0].lyricPath, lyrics.path)
-        XCTAssertEqual(songs[0].coverPath, cover.path)
+        assertSameFile(songs[0].originalPath, original)
+        assertSameFile(songs[0].accompanimentPath, accompaniment)
+        assertSameFile(songs[0].lyricPath, lyrics)
+        assertSameFile(songs[0].coverPath, cover)
     }
 
     func testScannerPrefersVideoOriginalAndLrcOverTextLyrics() throws {
@@ -69,8 +69,8 @@ final class HomeKTVMacTests: XCTestCase {
 
         let songs = try LibraryScanner.scan(folder: root)
         XCTAssertEqual(songs.count, 1)
-        XCTAssertEqual(songs[0].originalPath, video.path)
-        XCTAssertEqual(songs[0].lyricPath, lrc.path)
+        assertSameFile(songs[0].originalPath, video)
+        assertSameFile(songs[0].lyricPath, lrc)
     }
 
     func testScannerUsesSingleUnmarkedAudioAsVideoAccompanimentFallback() throws {
@@ -85,8 +85,8 @@ final class HomeKTVMacTests: XCTestCase {
 
         let songs = try LibraryScanner.scan(folder: root)
         XCTAssertEqual(songs.count, 1)
-        XCTAssertEqual(songs[0].originalPath, original.path)
-        XCTAssertEqual(songs[0].accompanimentPath, fallback.path)
+        assertSameFile(songs[0].originalPath, original)
+        assertSameFile(songs[0].accompanimentPath, fallback)
     }
 
     func testScannerSkipsEmptyFolders() throws {
@@ -105,5 +105,15 @@ final class HomeKTVMacTests: XCTestCase {
         for file in files {
             XCTAssertTrue(FileManager.default.createFile(atPath: file.path, contents: Data()))
         }
+    }
+
+    private func assertSameFile(_ actualPath: String?, _ expectedURL: URL, file: StaticString = #filePath, line: UInt = #line) {
+        guard let actualPath else {
+            XCTFail("Expected a file path", file: file, line: line)
+            return
+        }
+        let actual = URL(fileURLWithPath: actualPath).resolvingSymlinksInPath().standardizedFileURL
+        let expected = expectedURL.resolvingSymlinksInPath().standardizedFileURL
+        XCTAssertEqual(actual, expected, file: file, line: line)
     }
 }
