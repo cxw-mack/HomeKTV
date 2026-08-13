@@ -14,9 +14,12 @@
 *.iml
 
 # Local runtime data and media
-**/Data/
-**/Media/
-**/Logs/
+/Data/
+/Media/
+/Logs/
+**/dist/**/Data/
+**/dist/**/Media/
+**/dist/**/Logs/
 **/TestResults/
 **/.interrupted-*/
 **/.publish-*.log

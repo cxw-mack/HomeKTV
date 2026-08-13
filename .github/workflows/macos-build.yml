@@ -6,6 +6,11 @@ on:
     branches: [main]
     paths:
       - "HomeKTV-Mac/**"
+      - ".github/workflows/macos-build.yml"
+  pull_request:
+    paths:
+      - "HomeKTV-Mac/**"
+      - ".github/workflows/macos-build.yml"
 
 jobs:
   build:
