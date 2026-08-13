@@ -28,13 +28,17 @@ final class KTVStore: NSObject, ObservableObject, NSWindowDelegate {
     override init() {
         super.init()
         timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.15, preferredTimescale: 600), queue: .main) { [weak self] time in
-            guard let self else { return }
-            self.position = max(0, time.seconds.isFinite ? time.seconds : 0)
-            let total = self.player.currentItem?.duration.seconds ?? 0
-            self.duration = total.isFinite ? max(0, total) : 0
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.position = max(0, time.seconds.isFinite ? time.seconds : 0)
+                let total = self.player.currentItem?.duration.seconds ?? 0
+                self.duration = total.isFinite ? max(0, total) : 0
+            }
         }
         endObserver = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.playNext() }
+            MainActor.assumeIsolated {
+                self?.playNext()
+            }
         }
     }
 
@@ -177,9 +181,9 @@ final class KTVStore: NSObject, ObservableObject, NSWindowDelegate {
 
     func windowWillClose(_ notification: Notification) {
         guard let closingWindow = notification.object as? NSWindow,
-              let playerWindow,
-              closingWindow === playerWindow else { return }
-        playerWindow = nil
+              let activePlayerWindow = playerWindow,
+              closingWindow === activePlayerWindow else { return }
+        self.playerWindow = nil
     }
 
     func skip() { playNext() }
