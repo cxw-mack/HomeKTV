@@ -19,7 +19,9 @@ namespace HomeKTV.App;
 
 public partial class PlayerWindow : Window
 {
-    private readonly MainViewModel _viewModel;private readonly DispatcherTimer _timer;private LrcDocument _lyrics=LrcParser.Parse(null);private string? _loadedLyric;private string? _loadedSlide;private bool _useSlideA;private int _displayIndex;private bool _closeForShutdown;
+    private readonly MainViewModel _viewModel;private readonly DispatcherTimer _timer;private LrcDocument _lyrics=LrcParser.Parse(null);private string? _loadedLyric;private string? _loadedSlide;private bool _useSlideA;private int _displayIndex;private bool _closeForShutdown;private bool _timerTickActive;
+    private int _lyricsSettingsHash=int.MinValue;private double _lyricsLayoutWidth=double.NaN;private double _lyricsLayoutHeight=double.NaN;private int _lyricsStyleVersion;
+    private Brush _normalLyricBrush=Brushes.White;private Brush _currentLyricBrush=Brushes.DodgerBlue;private Effect? _activeLyricEffect;private Effect? _inactiveLyricEffect;
     public PlayerWindow(MainViewModel viewModel)
     {
         InitializeComponent();DataContext=_viewModel=viewModel;_displayIndex=viewModel.Settings.PlaybackDisplayIndex;IsVisibleChanged+=PlayerWindow_IsVisibleChanged;
@@ -64,6 +66,7 @@ public partial class PlayerWindow : Window
 
     private async void TimerTick(object? sender,EventArgs e)
     {
+        if(_timerTickActive)return;_timerTickActive=true;
         try
         {
             var active=_viewModel.CurrentTitle!="等待点歌";PlaybackOverlay.Visibility=active?Visibility.Visible:Visibility.Collapsed;IdlePanel.Visibility=active?Visibility.Collapsed:Visibility.Visible;
@@ -75,6 +78,7 @@ public partial class PlayerWindow : Window
             if(LyricsPanel.Visibility==Visibility.Collapsed){if(!_viewModel.Settings.Lyrics.KeepSongInformationWhenHidden)SongInformationPanel.Visibility=Visibility.Collapsed;if(!_viewModel.Settings.Lyrics.KeepNextSongWhenHidden)NextSongPanel.Visibility=Visibility.Collapsed;TopInfoPanel.Visibility=SongInformationPanel.Visibility==Visibility.Visible||NextSongPanel.Visibility==Visibility.Visible?Visibility.Visible:Visibility.Collapsed;}
         }
         catch(Exception){TopLyric.Text="歌词文件不可读取";BottomLyric.Text="";}
+        finally{_timerTickActive=false;}
     }
 
     private void LoadSlide(string? relativePath)
@@ -112,27 +116,34 @@ public partial class PlayerWindow : Window
 
     private void SetLyricLine(System.Windows.Controls.TextBlock line,string text,bool active,double progress)
     {
-        var settings=_viewModel.Settings.Lyrics;var normal=ParseBrush(settings.FontColor,Brushes.White);var current=ParseBrush(settings.CurrentFontColor,Brushes.DodgerBlue);
-        line.Inlines.Clear();line.Foreground=active?current:normal;
-        line.Effect=CreateLyricEffect(settings,active);
-        if(!active||settings.DisplayMode!=HomeKTV.Core.Models.LyricsDisplayMode.Karaoke||text.Length==0){line.Text=text;return;}
-        var highlighted=Math.Clamp((int)Math.Ceiling(text.Length*progress),0,text.Length);
-        if(highlighted>0)line.Inlines.Add(new System.Windows.Documents.Run(text[..highlighted]){Foreground=current});
-        if(highlighted<text.Length)line.Inlines.Add(new System.Windows.Documents.Run(text[highlighted..]){Foreground=normal});
+        var settings=_viewModel.Settings.Lyrics;var highlighted=active&&settings.DisplayMode==HomeKTV.Core.Models.LyricsDisplayMode.Karaoke&&text.Length>0?Math.Clamp((int)Math.Ceiling(text.Length*progress),0,text.Length):-1;
+        var state=new LyricRenderState(text,active,highlighted,_lyricsStyleVersion);if(line.Tag is LyricRenderState previous&&previous==state)return;
+        line.Tag=state;line.Foreground=active?_currentLyricBrush:_normalLyricBrush;line.Effect=active?_activeLyricEffect:_inactiveLyricEffect;
+        if(highlighted<0){line.Text=text;return;}
+        line.Inlines.Clear();
+        if(highlighted>0)line.Inlines.Add(new System.Windows.Documents.Run(text[..highlighted]){Foreground=_currentLyricBrush});
+        if(highlighted<text.Length)line.Inlines.Add(new System.Windows.Documents.Run(text[highlighted..]){Foreground=_normalLyricBrush});
     }
 
     private void ApplyLyricsSettings()
     {
         var settings=_viewModel.Settings.Lyrics;
+        var hash=new HashCode();hash.Add(settings.FontFamily);hash.Add(settings.FontSize);hash.Add(settings.HorizontalMargin);hash.Add(settings.Position);hash.Add(settings.ShadowEnabled);hash.Add(settings.OutlineThickness);hash.Add(settings.OutlineColor);hash.Add(settings.FontColor);hash.Add(settings.CurrentFontColor);hash.Add(settings.TranslucentBackground);hash.Add(settings.BackgroundOpacity);hash.Add(settings.LineSpacing);var settingsHash=hash.ToHashCode();
+        if(settingsHash==_lyricsSettingsHash&&Math.Abs(ActualWidth-_lyricsLayoutWidth)<.5&&Math.Abs(ActualHeight-_lyricsLayoutHeight)<.5)return;
+        _lyricsSettingsHash=settingsHash;_lyricsLayoutWidth=ActualWidth;_lyricsLayoutHeight=ActualHeight;_lyricsStyleVersion++;
         LyricsPanel.Width=Math.Max(320,ActualWidth-Math.Clamp(settings.HorizontalMargin,0,400)*2);
         LyricsPanel.VerticalAlignment=settings.Position switch{HomeKTV.Core.Models.LyricsOverlayPosition.Top=>VerticalAlignment.Top,HomeKTV.Core.Models.LyricsOverlayPosition.Middle=>VerticalAlignment.Center,HomeKTV.Core.Models.LyricsOverlayPosition.LowerMiddle=>VerticalAlignment.Center,_=>VerticalAlignment.Bottom};
         LyricsPanel.Margin=settings.Position switch{HomeKTV.Core.Models.LyricsOverlayPosition.Top=>new Thickness(0,110,0,0),HomeKTV.Core.Models.LyricsOverlayPosition.LowerMiddle=>new Thickness(0,ActualHeight*.28,0,0),HomeKTV.Core.Models.LyricsOverlayPosition.Middle=>new Thickness(0),_=>new Thickness(0,0,0,54)};
         var family=new FontFamily(settings.FontFamily);TopLyric.FontFamily=BottomLyric.FontFamily=family;
         TopLyric.FontSize=BottomLyric.FontSize=settings.FontSize;
-        var outline=ParseColor(settings.OutlineColor,Colors.Black);var effect=settings.ShadowEnabled||settings.OutlineThickness>0?new DropShadowEffect{Color=outline,BlurRadius=Math.Max(settings.ShadowEnabled?8:0,settings.OutlineThickness*2),ShadowDepth=settings.ShadowEnabled?1:0,Opacity=.95}:null;TopLyric.Effect=BottomLyric.Effect=effect;
-        LyricsPanel.Background=settings.TranslucentBackground?new SolidColorBrush(Color.FromArgb((byte)Math.Round(255*Math.Clamp(settings.BackgroundOpacity,0,1)),0,0,0)):Brushes.Transparent;
+        _normalLyricBrush=FreezeRequired(ParseBrush(settings.FontColor,Brushes.White));_currentLyricBrush=FreezeRequired(ParseBrush(settings.CurrentFontColor,Brushes.DodgerBlue));
+        _activeLyricEffect=FreezeOptional(CreateLyricEffect(settings,true));_inactiveLyricEffect=FreezeOptional(CreateLyricEffect(settings,false));
+        LyricsPanel.Background=settings.TranslucentBackground?FreezeRequired(new SolidColorBrush(Color.FromArgb((byte)Math.Round(255*Math.Clamp(settings.BackgroundOpacity,0,1)),0,0,0))):Brushes.Transparent;
         TopLyric.Margin=new Thickness(0,settings.LineSpacing/2,0,settings.LineSpacing);BottomLyric.Margin=new Thickness(0,settings.LineSpacing,0,settings.LineSpacing/2);
     }
+
+    private static T FreezeRequired<T>(T value) where T:Freezable{if(value.CanFreeze&&!value.IsFrozen)value.Freeze();return value;}
+    private static T? FreezeOptional<T>(T? value) where T:Freezable{if(value is not null&&value.CanFreeze&&!value.IsFrozen)value.Freeze();return value;}
 
     private static Brush ParseBrush(string value,Brush fallback){try{return new BrushConverter().ConvertFromString(value) as Brush??fallback;}catch(FormatException){return fallback;}catch(NotSupportedException){return fallback;}}
     private static Color ParseColor(string value,Color fallback){try{return (Color)ColorConverter.ConvertFromString(value);}catch(FormatException){return fallback;}catch(NotSupportedException){return fallback;}}
@@ -174,6 +185,8 @@ public partial class PlayerWindow : Window
     }
     private void OnClosing(object? sender,CancelEventArgs e){if(_closeForShutdown)return;e.Cancel=true;HidePlayer();}
     private void OnClosed(object? sender,EventArgs e){_timer.Stop();SystemEvents.DisplaySettingsChanged-=DisplaySettingsChanged;IsVisibleChanged-=PlayerWindow_IsVisibleChanged;SetOwnedOverlayWindowsVisible(false);SlideImageA.Source=SlideImageB.Source=SlideBackground.Source=null;VideoView.MediaPlayer=null;}
+
+    private readonly record struct LyricRenderState(string Text,bool Active,int HighlightedCharacters,int StyleVersion);
 
     [DllImport("user32.dll",SetLastError=true)]private static extern bool SetWindowPos(IntPtr hWnd,IntPtr hWndInsertAfter,int x,int y,int cx,int cy,uint flags);
 }

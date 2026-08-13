@@ -1,17 +1,57 @@
+# Build outputs and IDE state
 **/bin/
 **/obj/
-**/TestResults/
+**/build/
+**/app/build/
+**/dist/
 **/node_modules/
-src/HomeKTV.Web/dist/
-dist/
+**/.gradle/
+**/.tooling/
 .vs/
 .idea/
 *.user
 *.suo
+*.iml
+
+# Local runtime data and media
+/Data/
+/Media/
+/Logs/
+**/dist/**/Data/
+**/dist/**/Media/
+**/dist/**/Logs/
+**/TestResults/
+**/.interrupted-*/
+**/.publish-*.log
+**/.gh-*.log
+**/*.db
+**/*.db-*
+**/.homektv-*/
+
+# Generated release archives and installers
+*.zip
+*.apk
+*.aab
+*.dmg
+*.pkg
+
+# Local machine configuration and credentials
+**/local.properties
+*.pfx
+*.p12
+*.key
+*.pem
+
+# Bundled local media tool binaries
+**/runtime-assets/FFmpeg/*.exe
+**/runtime-assets/AI/
+**/ai/
+
+# Local source/staging copies kept beside this repository
+/HomeKTV/
+/HomeKTV-Mac-source-*.zip
+
+# Package caches
 *.nupkg
 *.snupkg
 .bootstrap-cache/
-.homektv-*/
-runtime-assets/FFmpeg/*.exe
-runtime-assets/AI/
-ai/

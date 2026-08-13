@@ -135,6 +135,7 @@ public sealed class HomeKtvWebServer : IAsyncDisposable
             if(!Enum.TryParse<PlaybackControlCommand>(body.Command,true,out var command))return Results.BadRequest(new{error="未知播放控制命令。"});
             if(_playback.Current.QueueItemId is null)return Results.Conflict(new{error="当前没有正在播放的歌曲。"});
             if(command==PlaybackControlCommand.Accompaniment&&!_playback.Current.CanUseAccompaniment)return Results.Conflict(new{error="当前歌曲没有可用伴奏。"});
+            if((command is PlaybackControlCommand.LyricsIncreaseFiveSeconds or PlaybackControlCommand.LyricsDecreaseFiveSeconds)&&!_playback.Current.LyricsAvailable)return Results.Conflict(new{error="当前歌曲没有可调节的同步歌词。"});
             var handler=PlaybackControlRequested;if(handler is null)return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
             await handler(command,ct);return Results.NoContent();
         });

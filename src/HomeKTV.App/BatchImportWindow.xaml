@@ -33,6 +33,7 @@
                 <DataGridTextColumn Header="状态" Binding="{Binding RecognitionStatus}" IsReadOnly="True" Width="110"/>
                 <DataGridTextColumn Header="歌手" Binding="{Binding Artist,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}" Width="170"/>
                 <DataGridTextColumn Header="歌曲名" Binding="{Binding Title,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}" Width="210"/>
+                <DataGridTextColumn Header="分类" Binding="{Binding Language,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}" Width="90"/>
                 <DataGridTextColumn Header="原唱 / 主媒体" Binding="{Binding PrimaryFileName}" IsReadOnly="True" Width="250"/>
                 <DataGridTextColumn Header="伴奏" Binding="{Binding AccompanimentFileName}" IsReadOnly="True" Width="230"/>
                 <DataGridTextColumn Header="歌词" Binding="{Binding LyricFileName}" IsReadOnly="True" Width="190"/>

@@ -3,7 +3,7 @@ export interface QueueSong { id:number; title:string; artistDisplayName:string; 
 export interface QueueItem { id:number; songId:number; requestedBy:string; requestedAt:string; position:number; isPinned:boolean; state:number; errorMessage:string|null; isMine:boolean; song:QueueSong }
 export interface Session { id:string; nickname:string; isAdministrator:boolean; accessToken:string }
 export interface Playback { queueItemId:number|null; title:string|null; artist:string|null; state:string; nextTitle:string|null; lyricsVisible:boolean; lyricsAvailable:boolean; audioMode:'Original'|'Accompaniment'; canUseAccompaniment:boolean; volume:number }
-export type PlaybackControlCommand='togglePause'|'restart'|'skip'|'original'|'accompaniment'
+export type PlaybackControlCommand='togglePause'|'restart'|'skip'|'original'|'accompaniment'|'lyricsIncreaseFiveSeconds'|'lyricsDecreaseFiveSeconds'
 
 function sessionHeaders(session?:Session|null):Record<string,string> {
   return session?{'X-HomeKTV-Session':session.id,'X-HomeKTV-Token':session.accessToken}:{}

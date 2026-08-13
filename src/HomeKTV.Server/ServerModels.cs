@@ -14,7 +14,7 @@ public sealed record MoveQueueRequest(int Direction);
 public sealed record LyricsVisibilityRequest(bool Visible);
 public sealed record PlaybackControlRequest(string Command);
 public sealed record PlaybackVolumeRequest(int Volume);
-public enum PlaybackControlCommand { TogglePause, Restart, Skip, Original, Accompaniment }
+public enum PlaybackControlCommand { TogglePause, Restart, Skip, Original, Accompaniment, LyricsIncreaseFiveSeconds, LyricsDecreaseFiveSeconds }
 public sealed record QueueSongDto(long Id, string Title, string ArtistDisplayName, SongMediaType MediaType, bool HasLyrics, bool HasAccompaniment, AiProcessingStatus AiProcessingStatus, bool HasCustomSlideshow);
 public sealed record QueueItemDto(long Id,long SongId,string RequestedBy,DateTimeOffset RequestedAt,long Position,bool IsPinned,QueueItemState State,string? ErrorMessage,bool IsMine,QueueSongDto Song)
 {

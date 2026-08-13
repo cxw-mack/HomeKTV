@@ -41,6 +41,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\publish-portable.p
 
 输出位于 `dist/HomeKTV-Portable-win-x64` 和 `dist/HomeKTV-Portable-win-x64.zip`。
 
+## 多平台版本
+
+- `HomeKTV-Android/`：Android 手机、平板和电视盒子版本，使用 Android Studio 或目录内的构建脚本生成 APK。
+- `HomeKTV-Mac/`：macOS 原生版本，支持 Apple Silicon 和 Intel Mac，使用 Xcode/Swift Package Manager 构建。
+- 根目录：Windows 11 x64 桌面版及手机点歌服务。
+
+三个版本共享相同的歌曲文件夹约定，但构建输出、本地数据库、日志和歌曲媒体不会提交到仓库。
+
 ## 媒体与版权
 
 仓库和发布包不包含商业歌曲、MV 或用户歌库。请仅导入你合法拥有或获授权使用的媒体，并遵守所在地版权法律。第三方组件信息见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

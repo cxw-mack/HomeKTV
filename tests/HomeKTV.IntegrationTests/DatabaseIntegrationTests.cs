@@ -32,6 +32,49 @@ public sealed class DatabaseIntegrationTests
     }
 
     [Fact]
+    public async Task ClassificationRepairUpdatesOnlyClassificationFields()
+    {
+        await using var fixture = await TestDatabase.CreateAsync();
+        var repository = new SqliteSongRepository(fixture.Database);
+        var id = await repository.UpsertAsync(new Song
+        {
+            Title = "稻香", ArtistDisplayName = "周杰伦", Language = "其他", CategoryId = 4,
+            VideoRelativePath = "Media/MV/daoxiang.mp4", FileHash = "classification-repair"
+        });
+        var before = await repository.GetAsync(id);
+
+        Assert.Equal(1, await new SongClassificationRepairService(fixture.Database).RepairAsync());
+
+        var repaired = await repository.GetAsync(id);
+        Assert.Equal("华语", repaired!.Language);
+        Assert.Equal(1L, repaired.CategoryId);
+        Assert.Equal(before!.UpdatedAt, repaired.UpdatedAt);
+        Assert.Equal(before.CreatedAt, repaired.CreatedAt);
+        Assert.Equal(0, await new SongClassificationRepairService(fixture.Database).RepairAsync());
+    }
+
+    [Fact]
+    public async Task LocalImporterInfersOtherLanguageAndKeepsExplicitClassification()
+    {
+        await using var fixture = await TestDatabase.CreateAsync();
+        var repository = new SqliteSongRepository(fixture.Database);
+        var importer = new LocalMediaImporter(fixture.Paths, fixture.Database, repository,
+            new FfprobeMediaInspector(Path.Combine(fixture.Root, "missing-ffprobe.exe")));
+        var mandarinSource = Path.Combine(fixture.Root, "mandarin.mp4");
+        var explicitSource = Path.Combine(fixture.Root, "explicit.mp4");
+        await File.WriteAllBytesAsync(mandarinSource, [1, 2, 3]);
+        await File.WriteAllBytesAsync(explicitSource, [4, 5, 6]);
+
+        var inferred = await importer.ImportAsync(new LocalImportRequest(mandarinSource, "稻香", "周杰伦", "其他", 4));
+        var explicitCantonese = await importer.ImportAsync(new LocalImportRequest(explicitSource, "手工分类", "测试歌手", "粤语", 2));
+
+        Assert.Equal("华语", inferred.Song!.Language);
+        Assert.Equal(1L, inferred.Song.CategoryId);
+        Assert.Equal("粤语", explicitCantonese.Song!.Language);
+        Assert.Equal(2L, explicitCantonese.Song.CategoryId);
+    }
+
+    [Fact]
     public async Task RepositoryRejectsAbsoluteMediaPath()
     {
         await using var fixture = await TestDatabase.CreateAsync();

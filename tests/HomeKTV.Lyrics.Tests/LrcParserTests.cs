@@ -32,6 +32,14 @@ public sealed class LrcParserTests
     }
 
     [Fact]
+    public void AppliesFiveSecondOffsetInBothDirections()
+    {
+        var document=LrcParser.Parse("[00:05]第一句\n[00:10]第二句");
+        Assert.Equal("第二句",document.Locate(TimeSpan.FromMilliseconds(5100),5000).Current!.Text);
+        Assert.Equal("第一句",document.Locate(TimeSpan.FromMilliseconds(10100),-5000).Current!.Text);
+    }
+
+    [Fact]
     public void EmptyLyricsNeverThrow()
     {
         var position = LrcParser.Parse(null).Locate(TimeSpan.Zero);
